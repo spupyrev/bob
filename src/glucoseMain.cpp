@@ -695,11 +695,20 @@ int stackLowerBound(InputGraph& inputGraph, Params& params) {
 int queueLowerBound(InputGraph& inputGraph, Params& params) {
   int n = inputGraph.nc;
   int m = inputGraph.edges.size();
+  int lb = params.pages + 1;
   for (int k = 0; k <= params.pages; k++) {
     int maxEdges = 2*k*n - k*(2*k+1);
-    if (maxEdges >= m) return max(k, dispersibleLowerBound(inputGraph, params));
+    if (maxEdges >= m) {
+    	lb = k;
+    	break;
+    }
   }
-  return max(params.pages + 1, dispersibleLowerBound(inputGraph, params));
+
+  if (params.dispersible) {
+  	lb = max(lb, dispersibleLowerBound(inputGraph, params));
+  }
+
+  return lb;
 }
 
 int trackLowerBound(InputGraph& inputGraph, Params& params) {

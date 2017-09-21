@@ -54,6 +54,8 @@ void parseEdge(DotGraph& graph, const vector<string>& lines) {
   map<string, string> attrs = parseAttrs(lines);
   string source = getAttr(attrs, "source");
   string target = getAttr(attrs, "target");
+  // ignoring loops
+  if (source == target) return;
   auto edge = graph.addEdge(source, target);
   setAttr(edge, attrs, "fill");
   setAttr(edge, attrs, "width");

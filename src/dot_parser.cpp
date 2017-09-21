@@ -157,6 +157,7 @@ DotEdge* ParseEdge(DotGraph& graph, const string& line)
 		{
 			string n1 = beforeBrakets.substr(0, j);
 			string n2 = beforeBrakets.substr(j + 2, beforeBrakets.length() - j - 2);
+			if (n1 == n2) return nullptr;
 			e = graph.addEdge(ExtractId(n1), ExtractId(n2));
 			break;
 		}
