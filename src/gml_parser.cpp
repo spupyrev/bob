@@ -75,9 +75,15 @@ bool readGmlGraphInt(istream& in, DotGraph& graph) {
     if (tmp[0] == "node") {
     	CHECK(!in_node && !in_edge, 120);
       in_node = true;
+      if (tmp.size() > 1 && tmp[1] == "[") {
+        depth++;
+      }
     } else if (tmp[0] == "edge") {
     	CHECK(!in_node && !in_edge, 120);
       in_edge = true;
+      if (tmp.size() > 1 && tmp[1] == "[") {
+        depth++;
+      }
     } else if (tmp[0] == "[") {
       if (in_node || in_edge) {
         depth++;
