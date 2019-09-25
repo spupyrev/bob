@@ -7,7 +7,7 @@ HEADERS = $(wildcard **/*.h)
 SOURCES = $(wildcard src/*.cpp)
 
 # Targets
-TARGET = be
+TARGET = bob
 
 OBJECTS = $(SOURCES:src/%.cpp=build/%.o)
 
