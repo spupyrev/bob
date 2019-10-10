@@ -49,13 +49,13 @@ void encodePageVariables(SATModel& model, InputGraph& inputGraph, int pageCount)
     for (int j = 0; j < pageCount; j++) {
       clause.addVar( model.getPageVar(i, j, true) );
     }
-
     model.addClause( clause );
   }
 
   // at most one page
+  CHECK(inputGraph.multiPage.size() == inputGraph.edges.size() || inputGraph.multiPage.empty());
   for (int i = 0; i < m; i++) {
-    MClause clause;
+    if (inputGraph.multiPage.size() == inputGraph.edges.size() && inputGraph.multiPage[i]) continue;
     for (int j = 0; j < pageCount; j++) {
       for (int k = j + 1; k < pageCount; k++) {
         model.addClause( MClause(model.getPageVar(i, j, false), model.getPageVar(i, k, false)) );
@@ -68,10 +68,14 @@ void encodePageVariables(SATModel& model, InputGraph& inputGraph, int pageCount)
     for (int j = i + 1; j < m; j++) {
       // add var
       model.addSamePageVar(i, j);
-      //set on same page var
-      for (int j1 = 0; j1 < pageCount; j1++) {
-        for (int j2 = 0; j2 < pageCount; j2++) {
-          model.addClause( MClause(model.getPageVar(i, j1, false), model.getPageVar(j, j2, false), model.getSamePageVar(i, j, (j1 == j2))) );
+      bool multiI = inputGraph.multiPage.size() == inputGraph.edges.size() && inputGraph.multiPage[i];
+      bool multiJ = inputGraph.multiPage.size() == inputGraph.edges.size() && inputGraph.multiPage[j];
+
+      // set on same page var
+      for (int p1 = 0; p1 < pageCount; p1++) {
+        for (int p2 = 0; p2 < pageCount; p2++) {
+          if (p1 != p2 && (multiI || multiJ)) continue;
+          model.addClause( MClause(model.getPageVar(i, p1, false), model.getPageVar(j, p2, false), model.getSamePageVar(i, j, (p1 == p2))) );
         }
       }
     }
@@ -88,7 +92,7 @@ void encodeTrackVariables(SATModel& model, InputGraph& inputGraph, int trackCoun
     }
   }
 
-  // at least one page
+  // at least one track per vertex
   for (int i = 0; i < n; i++) {
     MClause clause;
     for (int j = 0; j < trackCount; j++) {
@@ -98,7 +102,7 @@ void encodeTrackVariables(SATModel& model, InputGraph& inputGraph, int trackCoun
     model.addClause( clause );
   }
 
-  // at most one page
+  // at most one track per vertex
   for (int i = 0; i < n; i++) {
     MClause clause;
     for (int j = 0; j < trackCount; j++) {
@@ -119,197 +123,16 @@ void encodeTrackVariables(SATModel& model, InputGraph& inputGraph, int trackCoun
       }
     }
   }
-}
 
-void encodeTrees(SATModel& model, InputGraph& inputGraph, int pageCount) {
-  if (pageCount > 3) {
-  	ERROR("more than 3 trees is not supported");
-  }
-
-  vector<int> firstVarFather;
-  vector<int> firstVarAncestor;
-
-  int n = inputGraph.nc;
-  int m = inputGraph.edges.size();
-
-  //create father variables
-  for (int j = 0; j < pageCount; j++) {
-    firstVarFather.push_back( model.addVar() );
-    model.addVar();
-    for (int i = 1; i < m; i++) {
-      model.addVar();
-      model.addVar();
-    }
-  }
-
-  //create ancestor variables
-  for (int j = 0; j < pageCount; j++) {
-    firstVarAncestor.push_back( model.addVar() );
-    for (int i = 0; i < n; i++) {
-      for (int k = 0; k < n; k++) {
-        if (i == 0 && k == 0) {
-          continue;
+  // track i before track j for all i < j
+  for (int i = 0; i < trackCount; i++) {
+    for (int j = i + 1; j < trackCount; j++) {
+      for (int v = 0; v < n; v++) {
+        for (int u = 0; u < n; u++) {
+          if (v == u) continue;
+          // u on track_i && v on track_j => u < v
+          model.addClause( MClause(model.getTrackVar(u, i, false), model.getTrackVar(v, j, false), model.getRelVar(u, v, true)) );
         }
-        model.addVar();
-      }
-    }
-  }
-
-  //create root variables
-  int firstVarRoot = model.addVar();
-  for (int i = 0; i < n; i++) {
-    for (int j = 0; j < pageCount; j++) {
-      if (i == 0 && j == 0) {
-        continue;
-      }
-
-      model.addVar();
-    }
-  }
-
-  //clauses:
-  for (int page = 0; page < pageCount; page++) {
-    for (int j = 0; j < m; j++) {
-      int en1 = inputGraph.edges[j].first;
-      int en2 = inputGraph.edges[j].second;
-
-      //when an edge i is not on page page j, then both father  variables are false
-      model.addClause( MClause(model.getPageVar(j, page, true), MVar(firstVarFather[page] + (2 * j), false)) );
-      model.addClause( MClause(model.getPageVar(j, page, true), MVar(firstVarFather[page] + (2 * j) + 1, false)) );
-
-      //when an edge is on page j, than exactly one father variable has to be true
-      model.addClause( MClause(model.getPageVar(j, page, false), MVar(firstVarFather[page] + (2 * j), true), MVar(firstVarFather[page] + (2 * j) + 1, true)) );
-      model.addClause( MClause(model.getPageVar(j, page, false), MVar(firstVarFather[page] + (2 * j), false), MVar(firstVarFather[page] + (2 * j) + 1, false)) );
-
-      //if any node has a father it cannot be the root in tree k
-      model.addClause( MClause(MVar(firstVarFather[page] + (2 * j), false), MVar(firstVarRoot + (en2 * pageCount) + page, false)) );
-      model.addClause( MClause(MVar(firstVarFather[page] + (2 * j) + 1, false), MVar(firstVarRoot + (en1 * pageCount) + page, false)) );
-    }
-  }
-
-
-  for (int i = 0; i < pageCount; i++) {
-    for (int j = 0; j < n; j++) {
-      //first: get the incident edges
-      int countIEdges = 0;
-      vector<int> incidentEdges;
-      for (int k = 0; k < m; k++) {
-        if (inputGraph.edges[k].first == j || inputGraph.edges[k].second == j) {
-          incidentEdges.push_back(k);
-          countIEdges++;
-        }
-      }
-
-      // when no father and at least one child, it is the root
-      for (int k = 0; k < countIEdges; k++) {
-        MClause clause;
-
-        for (int l = 0; l < countIEdges; l++) {
-          if (inputGraph.edges[incidentEdges[l]].first == j) {
-            clause.addVar(MVar( firstVarFather[i] + (2 * incidentEdges[l]) + 1, true ));
-          }
-          else {
-            clause.addVar(MVar( firstVarFather[i] + (2 * incidentEdges[l]), true ));
-          }
-        }
-
-        if (inputGraph.edges[incidentEdges[k]].first == j) {
-          clause.addVar(MVar( firstVarFather[i] + (2 * incidentEdges[k]), false ));
-        }
-        else {
-          clause.addVar(MVar( firstVarFather[i] + (2 * incidentEdges[k]) + 1, false ));
-        }
-
-        clause.addVar(MVar( firstVarRoot + (j * pageCount) + i, true ));
-        model.addClause( clause );
-      }
-
-      //when no child, then node is not root on page
-      MClause clause;
-      for (int k = 0; k < countIEdges; k++) {
-        if (inputGraph.edges[incidentEdges[k]].first == j) {
-          clause.addVar(MVar( firstVarFather[i] + (2 * incidentEdges[k]), true ));
-        }
-        else {
-          clause.addVar(MVar( firstVarFather[i] + (2 * incidentEdges[k]) + 1, true ));
-        }
-      }
-      clause.addVar(MVar( firstVarRoot + (j * pageCount) + i, false ));
-      model.addClause( clause );
-
-      //one node cannot have two fathers
-      for (int k = 0; k < countIEdges; k++) {
-        for (int l = k + 1; l < countIEdges; l++) {
-          MClause clause;
-          if (inputGraph.edges[incidentEdges[k]].first == j) {
-            clause.addVar(MVar( firstVarFather[i] + (2 * incidentEdges[k]) + 1, false ));
-          }
-          else {
-            clause.addVar(MVar( firstVarFather[i] + (2 * incidentEdges[k]), false ));
-          }
-
-          if (inputGraph.edges[incidentEdges[l]].first == j) {
-            clause.addVar(MVar( firstVarFather[i] + (2 * incidentEdges[l]) + 1, false ));
-          }
-          else {
-            clause.addVar(MVar( firstVarFather[i] + (2 * incidentEdges[l]), false ));
-          }
-
-          model.addClause( clause );
-        }
-      }
-    }
-  }
-
-  for (int i = 0; i < pageCount; i++) {
-    for (int j = 0; j < m; j++) {
-      //ancestor relation
-      int en1 = inputGraph.edges[j].first;
-      int en2 = inputGraph.edges[j].second;
-
-      //if a is father of b, then a is ancestor of b as well
-      model.addClause( MClause(MVar(firstVarFather[i] + (2 * j), false), MVar(firstVarAncestor[i] + (en1 * n) + en2, true)) );
-
-      model.addClause( MClause(MVar(firstVarFather[i] + (2 * j) + 1, false), MVar(firstVarAncestor[i] + (en2 * n) + en1, true)) );
-    }
-
-    //transitivity of ancestor relation
-    for (int j = 0; j < n; j++) {
-      for (int k = j + 1; k < n; k++) {
-        for (int l = k + 1; l < n; l++) {
-          model.addClause( MClause(MVar(firstVarAncestor[i] + (j * n) + k, false), MVar(firstVarAncestor[i] + (k * n) + l, false), MVar(firstVarAncestor[i] + (j * n) + l, true)) );
-
-          model.addClause( MClause(MVar(firstVarAncestor[i] + (j * n) + l, false), MVar(firstVarAncestor[i] + (l * n) + k, false), MVar(firstVarAncestor[i] + (j * n) + k, true)) );
-
-          model.addClause( MClause(MVar(firstVarAncestor[i] + (k * n) + j, false), MVar(firstVarAncestor[i] + (j * n) + l, false), MVar(firstVarAncestor[i] + (k * n) + l, true)) );
-
-          model.addClause( MClause(MVar(firstVarAncestor[i] + (k * n) + l, false), MVar(firstVarAncestor[i] + (l * n) + j, false), MVar(firstVarAncestor[i] + (k * n) + j, true)) );
-
-          model.addClause( MClause(MVar(firstVarAncestor[i] + (l * n) + j, false), MVar(firstVarAncestor[i] + (j * n) + k, false), MVar(firstVarAncestor[i] + (l * n) + k, true)) );
-
-          model.addClause( MClause(MVar(firstVarAncestor[i] + (l * n) + k, false), MVar(firstVarAncestor[i] + (k * n) + j, false), MVar(firstVarAncestor[i] + (l * n) + j, true)) );
-        }
-
-        //antisymmetric relation
-        model.addClause( MClause(MVar(firstVarAncestor[i] + (j * n) + k, false), MVar(firstVarAncestor[i] + (k * n) + j, false)) );
-      }
-    }
-
-    //if one node is root it cannot be a descendent of anyone else
-    for (int j = 0; j < n; j++) {
-      for (int k = 0; k < n; k++) {
-        if (j == k) {
-          continue;
-        }
-
-        model.addClause( MClause(MVar(firstVarRoot + (j * pageCount) + i, false), MVar(firstVarAncestor[i] + (k * n) + j, false)) );
-      }
-    }
-
-    //for every page only trees: number of roots=1
-    for (int j = 0; j < n; j++) {
-      for (int k = j + 1; k < n; k++) {
-        model.addClause( MClause(MVar(firstVarRoot + (j * pageCount) + i, false), MVar(firstVarRoot + (k * pageCount) + i, false)) );
       }
     }
   }
@@ -389,6 +212,11 @@ void encodeTrackEdge(SATModel& model, InputGraph& inputGraph, int index, Params 
   // every edge spans two tracks
   model.addClause( MClause(model.getSameTrackVar(e1n1, e1n2, false)) );
 
+  // one page => fix
+  if (params.stacks + params.queues == 1) {
+    model.addClause( MClause(model.getPageVar(index, 0, true)) );
+  }
+
   for (int i = 0; i < index; i++) {
     int e2n1 = inputGraph.edges[i].first;
     int e2n2 = inputGraph.edges[i].second;
@@ -423,38 +251,42 @@ void encodeMixedEdge(SATModel& model, InputGraph& inputGraph, int index, Params 
     CHECK(e2n1 < e2n2);
 
     // no constraints for adjacent edges
-    if (!params.dispersible && (e1n1 == e2n1 || e1n1 == e2n2 || e1n2 == e2n1 || e1n2 == e2n2)) {
+    if (e1n1 == e2n1 || e1n1 == e2n2 || e1n2 == e2n1 || e1n2 == e2n2) {
       continue;
     }
 
-    // forbid crossings between i-th and index-th on page 0
-    model.addClause( MClause(crossingClause(model, i, index, e1n1, e2n1, e1n2, e2n2), model.getPageVar(i, 0, false), model.getPageVar(index, 0, false)) );
-    model.addClause( MClause(crossingClause(model, i, index, e1n1, e2n2, e1n2, e2n1), model.getPageVar(i, 0, false), model.getPageVar(index, 0, false)) );
-    model.addClause( MClause(crossingClause(model, i, index, e1n2, e2n1, e1n1, e2n2), model.getPageVar(i, 0, false), model.getPageVar(index, 0, false)) );
-    model.addClause( MClause(crossingClause(model, i, index, e1n2, e2n2, e1n1, e2n1), model.getPageVar(i, 0, false), model.getPageVar(index, 0, false)) );
+    // forbid crossings between i-th and index-th edges on pages [0, params.stacks)
+    for (int page = 0; page < params.stacks; page++) {
+      model.addClause( MClause(crossingClause(model, i, index, e1n1, e2n1, e1n2, e2n2), model.getPageVar(i, page, false), model.getPageVar(index, page, false)) );
+      model.addClause( MClause(crossingClause(model, i, index, e1n1, e2n2, e1n2, e2n1), model.getPageVar(i, page, false), model.getPageVar(index, page, false)) );
+      model.addClause( MClause(crossingClause(model, i, index, e1n2, e2n1, e1n1, e2n2), model.getPageVar(i, page, false), model.getPageVar(index, page, false)) );
+      model.addClause( MClause(crossingClause(model, i, index, e1n2, e2n2, e1n1, e2n1), model.getPageVar(i, page, false), model.getPageVar(index, page, false)) );
 
-    model.addClause( MClause(crossingClause(model, i, index, e2n1, e1n1, e2n2, e1n2), model.getPageVar(i, 0, false), model.getPageVar(index, 0, false)) );
-    model.addClause( MClause(crossingClause(model, i, index, e2n1, e1n2, e2n2, e1n1), model.getPageVar(i, 0, false), model.getPageVar(index, 0, false)) );
-    model.addClause( MClause(crossingClause(model, i, index, e2n2, e1n1, e2n1, e1n2), model.getPageVar(i, 0, false), model.getPageVar(index, 0, false)) );
-    model.addClause( MClause(crossingClause(model, i, index, e2n2, e1n2, e2n1, e1n1), model.getPageVar(i, 0, false), model.getPageVar(index, 0, false)) );
+      model.addClause( MClause(crossingClause(model, i, index, e2n1, e1n1, e2n2, e1n2), model.getPageVar(i, page, false), model.getPageVar(index, page, false)) );
+      model.addClause( MClause(crossingClause(model, i, index, e2n1, e1n2, e2n2, e1n1), model.getPageVar(i, page, false), model.getPageVar(index, page, false)) );
+      model.addClause( MClause(crossingClause(model, i, index, e2n2, e1n1, e2n1, e1n2), model.getPageVar(i, page, false), model.getPageVar(index, page, false)) );
+      model.addClause( MClause(crossingClause(model, i, index, e2n2, e1n2, e2n1, e1n1), model.getPageVar(i, page, false), model.getPageVar(index, page, false)) );
+    }
 
-    // forbid nestings between i-th and index-th on page 1
-    model.addClause( MClause(crossingClause(model, i, index, e1n1, e2n1, e2n2, e1n2), model.getPageVar(i, 1, false), model.getPageVar(index, 1, false)) );
-    model.addClause( MClause(crossingClause(model, i, index, e1n1, e2n2, e2n1, e1n2), model.getPageVar(i, 1, false), model.getPageVar(index, 1, false)) );
-    model.addClause( MClause(crossingClause(model, i, index, e1n2, e2n1, e2n2, e1n1), model.getPageVar(i, 1, false), model.getPageVar(index, 1, false)) );
-    model.addClause( MClause(crossingClause(model, i, index, e1n2, e2n2, e2n1, e1n1), model.getPageVar(i, 1, false), model.getPageVar(index, 1, false)) );
+    // forbid nestings between i-th and index-th edges on pages [params.stacks, params.stacks + params.queues)
+    for (int page = params.stacks; page < params.stacks + params.queues; page++) {
+      model.addClause( MClause(crossingClause(model, i, index, e1n1, e2n1, e2n2, e1n2), model.getPageVar(i, page, false), model.getPageVar(index, page, false)) );
+      model.addClause( MClause(crossingClause(model, i, index, e1n1, e2n2, e2n1, e1n2), model.getPageVar(i, page, false), model.getPageVar(index, page, false)) );
+      model.addClause( MClause(crossingClause(model, i, index, e1n2, e2n1, e2n2, e1n1), model.getPageVar(i, page, false), model.getPageVar(index, page, false)) );
+      model.addClause( MClause(crossingClause(model, i, index, e1n2, e2n2, e2n1, e1n1), model.getPageVar(i, page, false), model.getPageVar(index, page, false)) );
 
-    model.addClause( MClause(crossingClause(model, i, index, e2n1, e1n1, e1n2, e2n2), model.getPageVar(i, 1, false), model.getPageVar(index, 1, false)) );
-    model.addClause( MClause(crossingClause(model, i, index, e2n1, e1n2, e1n1, e2n2), model.getPageVar(i, 1, false), model.getPageVar(index, 1, false)) );
-    model.addClause( MClause(crossingClause(model, i, index, e2n2, e1n1, e1n2, e2n1), model.getPageVar(i, 1, false), model.getPageVar(index, 1, false)) );
-    model.addClause( MClause(crossingClause(model, i, index, e2n2, e1n2, e1n1, e2n1), model.getPageVar(i, 1, false), model.getPageVar(index, 1, false)) );
+      model.addClause( MClause(crossingClause(model, i, index, e2n1, e1n1, e1n2, e2n2), model.getPageVar(i, page, false), model.getPageVar(index, page, false)) );
+      model.addClause( MClause(crossingClause(model, i, index, e2n1, e1n2, e1n1, e2n2), model.getPageVar(i, page, false), model.getPageVar(index, page, false)) );
+      model.addClause( MClause(crossingClause(model, i, index, e2n2, e1n1, e1n2, e2n1), model.getPageVar(i, page, false), model.getPageVar(index, page, false)) );
+      model.addClause( MClause(crossingClause(model, i, index, e2n2, e1n2, e1n1, e2n1), model.getPageVar(i, page, false), model.getPageVar(index, page, false)) );
+    }
   }
 }
 
 void encodeStack(SATModel& model, InputGraph& inputGraph, Params params) {
   CHECK(params.isStack());
   encodeRelative(model, inputGraph);
-  encodePageVariables(model, inputGraph, params.pages);
+  encodePageVariables(model, inputGraph, params.stacks);
 
   for (size_t i = 0; i < inputGraph.edges.size(); i++) {
     encodeStackEdge(model, inputGraph, i, params);
@@ -464,7 +296,7 @@ void encodeStack(SATModel& model, InputGraph& inputGraph, Params params) {
 void encodeQueue(SATModel& model, InputGraph& inputGraph, Params params) {
   CHECK(params.isQueue());
   encodeRelative(model, inputGraph);
-  encodePageVariables(model, inputGraph, params.pages);
+  encodePageVariables(model, inputGraph, params.queues);
 
   for (size_t i = 0; i < inputGraph.edges.size(); i++) {
     encodeQueueEdge(model, inputGraph, i, params);
@@ -474,43 +306,30 @@ void encodeQueue(SATModel& model, InputGraph& inputGraph, Params params) {
 void encodeTrack(SATModel& model, InputGraph& inputGraph, Params params) {
   CHECK(params.isTrack());
   encodeRelative(model, inputGraph);
-  encodePageVariables(model, inputGraph, params.pages);
+  CHECK(params.stacks == 1);
+  encodePageVariables(model, inputGraph, params.stacks);
   encodeTrackVariables(model, inputGraph, params.tracks);
 
   for (size_t i = 0; i < inputGraph.edges.size(); i++) {
     encodeTrackEdge(model, inputGraph, i, params);
   }
-
-  if (params.span > 0) {
-    // adding span constraints
-    CHECK(params.span <= params.tracks - 1);
-    for (auto& edge : inputGraph.edges) {
-      int u = edge.first;
-      int v = edge.second;
-      for (int i = 0; i < params.tracks; i++) {
-        for (int j = i + 1; j < params.tracks; j++) {
-          if (j - i > params.span) {
-            model.addClause( MClause(model.getTrackVar(u, i, false), model.getTrackVar(v, j, false)) );
-            model.addClause( MClause(model.getTrackVar(u, j, false), model.getTrackVar(v, i, false)) );
-          }
-        }
-      }
-    }
-  }
 }
 
 void encodeMixed(SATModel& model, InputGraph& inputGraph, Params params) {
   CHECK(params.isMixed());
-  CHECK(params.pages == 2, "mixed layouts are supported for two pages only");
+  CHECK(params.stacks >= 1 && params.queues >= 1, "incorrect page number for mixed layout");
   encodeRelative(model, inputGraph);
-  encodePageVariables(model, inputGraph, params.pages);
+  encodePageVariables(model, inputGraph, params.stacks + params.queues);
 
+  // page assignment:
+  //   [0, params.stacks) are for stacks
+  //   [params.stacks, params.stacks + params.queues) are for queues
   for (size_t i = 0; i < inputGraph.edges.size(); i++) {
     encodeMixedEdge(model, inputGraph, i, params);
   }
 }
 
-void encodeSymmetryConstraints(SATModel& model, InputGraph& inputGraph, Params params) {
+void encodeAutomorphismConstraints(SATModel& model, InputGraph& inputGraph, Params params) {
   int n = inputGraph.nc;
 
   map<int, vector<int> > adj;
@@ -536,93 +355,160 @@ void encodeSymmetryConstraints(SATModel& model, InputGraph& inputGraph, Params p
     sort(group.begin(), group.end());
     for (size_t i = 0; i < group.size(); i++) {
       for (size_t j = i + 1; j < group.size(); j++) {
-        //cerr << (group[i] + 1) << " " << (group[j] + 1) << "\n";
         model.addClause( MClause(model.getRelVar(group[i], group[j], true)) );
       }
     }
   }
-  LOG_IF(params.verb && cnt > 0, "identified %d similarity groups...", cnt);
+  LOG_IF(params.verbose && cnt > 0, "identified %d similarity groups...", cnt);
 }
 
-void encodeConstraints(SATModel& model, InputGraph& inputGraph, Params params) {
-  int pageCount = params.pages;
+void encodeStackSymmetry(SATModel& model, InputGraph& inputGraph, Params params) {
   int n = inputGraph.nc;
 
-  // Basic Constraints
-  if (inputGraph.nodeRel.empty() && inputGraph.edgePages.empty() && inputGraph.nodeTracks.empty()) {
-    LOG_IF(params.verb, "adding basic constraints to break symmetry");
+  // set node 1 as the first one on the spine
+  for (int i = 0; i < n; i++) {
+    if (i == inputGraph.firstNode) continue;
+    inputGraph.addNodeRel(inputGraph.firstNode, i);
+  }
 
-    // STACK
+  // set the direction of the spine: 1 < 2
+  if (n >= 3) {
+    inputGraph.addNodeRel(1, 2);
+  }
+
+  if (!params.dispersible) {
+    // edge 0 on the first page
+    inputGraph.edgePages[0] = {0};
+    // edge 1 on the first page or second page
+    if (params.stacks >= 2 && inputGraph.edges.size() >= 2) {
+      inputGraph.edgePages[1] = {0, 1};
+    }
+  }
+}
+
+void encodeQueueSymmetry(SATModel& model, InputGraph& inputGraph, Params params) {
+  int n = inputGraph.nc;
+
+  // set the direction of the spine: 1 < 2
+  if (n >= 3) {
+    inputGraph.addNodeRel(1, 2);
+  }
+
+  if (!params.dispersible) {
+    // edge 0 on the first page
+    inputGraph.edgePages[0] = {0};
+    // edge 1 on the first page or second page
+    if (params.queues >= 2 && inputGraph.edges.size() >= 2) {
+      inputGraph.edgePages[1] = {0, 1};
+    }
+  }
+
+  // TODO: does this help?
+  // edges incident to first node => same page
+  // egdes incident to last node => same page
+  /*vector<int> rightmostVar;
+  vector<int> leftmostVar;
+  MClause rightClause, leftClause;
+  for (int i = 0; i < n; i++) {
+    rightmostVar.push_back(model.addVar());
+    leftmostVar.push_back(model.addVar());
+    rightClause.addVar(MVar(rightmostVar[i], true));
+    leftClause.addVar(MVar(leftmostVar[i], true));
+  }
+  model.addClause(rightClause);
+  model.addClause(leftClause);
+
+  for (int i = 0; i < n; i++) {
+    MClause rightClause(MVar(rightmostVar[i], true));
+    MClause leftClause(MVar(leftmostVar[i], true));
+    for (int j = 0; j < n; j++) {
+      if (i == j) continue;
+      rightClause.addVar(model.getRelVar(i, j, true));
+      leftClause.addVar(model.getRelVar(j, i, true));
+    }
+    model.addClause(rightClause);
+    model.addClause(leftClause);
+  }
+
+  for (int i = 0; i < n; i++) {
+    vector<int> adjEdges;
+    for (size_t j = 0; j < inputGraph.edges.size(); j++) {
+      auto& edge = inputGraph.edges[j];
+      if (edge.first == i || edge.second == i) {
+        adjEdges.push_back(j);
+      }
+    }
+
+    CHECK(adjEdges.size() > 0, "isolated vertex " + to_string(i));
+
+    for (size_t j1 = 0; j1 < adjEdges.size(); j1++) {
+      for (size_t j2 = j1 + 1; j2 < adjEdges.size(); j2++) {
+        model.addClause( MClause(MVar(rightmostVar[i], false), model.getSamePageVar(adjEdges[j1], adjEdges[j2], true)) );
+        model.addClause( MClause(MVar(leftmostVar[i], false), model.getSamePageVar(adjEdges[j1], adjEdges[j2], true)) );
+      }
+    }
+  }*/
+}
+
+void encodeTrackSymmetry(SATModel& model, InputGraph& inputGraph, Params params) {
+  // set node 1 on the first track, adjacent node x on the second and assume 1 < x
+  for (int i = 0; i < min(inputGraph.nc, params.tracks); i++) {
+    for (int t = 0; t <= i; t++) {
+      inputGraph.nodeTracks[i].push_back(t);
+    }
+  }
+  // set the direction of the spine: 1 < 2
+  inputGraph.addNodeRel(1, 2);
+}
+
+void encodeMixedSymmetry(SATModel& model, InputGraph& inputGraph, Params params) {
+  // set the direction of the spine: 1 < 2
+  if (inputGraph.nc >= 3) {
+    auto rel = make_pair(1, 2);
+    inputGraph.nodeRel.push_back(rel);
+  }
+}
+
+void encodeCustomConstraints(SATModel& model, InputGraph& inputGraph, Params params) {
+  // Basic symmetryc-breaking constraints
+  if (inputGraph.nodeRel.empty() && inputGraph.edgePages.empty() && inputGraph.nodeTracks.empty() && inputGraph.samePage.empty()) {
+    LOG_IF(params.verbose, "adding symmetry-breaking constraints");
+
     if (params.isStack()) {
-      // set node 1 as the first one on the spine
-      for (int i = 0; i < n; i++) {
-        if (i == inputGraph.firstNode) continue;
-        auto rel = make_pair(inputGraph.firstNode, i);
-        inputGraph.nodeRel.push_back(rel);
-      }
-
-      // set the direction of the spine: 1 < 2
-      if (n >= 3) {
-        auto rel = make_pair(1, 2);
-        inputGraph.nodeRel.push_back(rel);
-      }
-
-      // edge 0 on the last page
-      if (!params.dispersible) {
-        inputGraph.edgePages[0].push_back(pageCount - 1);
-      }
-    }
-    // QUEUE
-    if (params.isQueue()) {
-      // set the direction of the spine: 1 < 2
-      if (n >= 3) {
-        auto rel = make_pair(1, 2);
-        inputGraph.nodeRel.push_back(rel);
-      }
-      // edge 0 on the last page
-      if (!params.dispersible) {
-	      inputGraph.edgePages[0].push_back(pageCount - 1);
-	    }
-    }
-    // TRACK
-    if (params.isTrack()) {
-      // set node 1 on the first track, adjacent node x on the second and assume 1 < x
-
-      if (params.span == 0) {
-        int f = inputGraph.firstNode;
-        inputGraph.nodeTracks[f].push_back(0);
-
-        int x = -1;
-        for (auto e : inputGraph.edges) {
-          if (e.first == f) {x = e.second; break;}
-          if (e.second == f) {x = e.first; break;}
-        }
-        if (x != -1) {
-          inputGraph.nodeTracks[x].push_back(1);
-        }
-      }
-    }
-    // MIXED
-    if (params.isMixed()) {
-      // set the direction of the spine: 1 < 2
-      if (n >= 3) {
-        auto rel = make_pair(1, 2);
-        inputGraph.nodeRel.push_back(rel);
-      }
+      // STACK
+      encodeStackSymmetry(model, inputGraph, params);
+    } else if (params.isQueue()) {
+      // QUEUE
+      encodeQueueSymmetry(model, inputGraph, params);
+    } else if (params.isTrack()) {
+      // TRACK
+      encodeTrackSymmetry(model, inputGraph, params);
+    } else if (params.isMixed()) {
+      // MIXED
+      encodeMixedSymmetry(model, inputGraph, params);
     }
 
     // breaking symmetry: relative order for isomorphic vertices
-    encodeSymmetryConstraints(model, inputGraph, params);
+    encodeAutomorphismConstraints(model, inputGraph, params);
+  } else {
+    size_t numCons = inputGraph.nodeRel.size() + inputGraph.edgePages.size() + inputGraph.nodeTracks.size() + inputGraph.samePage.size();
+    LOG_IF(params.verbose, "encoding %zu custom constraints...", numCons);
   }
 
   // Custom Constraints
   for (size_t i = 0; i < inputGraph.nodeRel.size(); i++) {
-    auto pr = inputGraph.nodeRel[i];
-    CHECK(0 <= pr.first && pr.first < n);
-    CHECK(0 <= pr.second && pr.second < n);
-    CHECK(pr.first != pr.second);
+    auto rel = inputGraph.nodeRel[i];
+    int l = rel.first;
+    int r = rel.second;
+    CHECK(0 <= l && l < inputGraph.nc, "incorrect nodeRel (" + to_string(l) + ", " + to_string(r) + ")");
+    CHECK(0 <= r && r < inputGraph.nc, "incorrect nodeRel (" + to_string(l) + ", " + to_string(r) + ")");
+    CHECK(l != r, "incorrect nodeRel (" + to_string(l) + ", " + to_string(r) + ")");
 
-    model.addClause( MClause(model.getRelVar(pr.first, pr.second, true)) );
+    if (!params.isTrack()) {
+      model.addClause( MClause(model.getRelVar(l, r, true)) );
+    } else {
+      model.addClause( MClause(model.getRelVar(l, r, true), model.getSameTrackVar(l, r, false)) );
+    }
   }
 
   for (auto pr : inputGraph.edgePages) {
@@ -630,12 +516,19 @@ void encodeConstraints(SATModel& model, InputGraph& inputGraph, Params params) {
     auto& pages = pr.second;
     MClause clause;
     for (int page : pages) {
-      CHECK(0 <= pr.first && pr.first < (int)inputGraph.edges.size());
-      CHECK(0 <= page && page < pageCount);
+      CHECK(0 <= pr.first && pr.first < (int)inputGraph.edges.size(), "incorrect edgePages");
+      CHECK(0 <= page && page < params.stacks + params.queues);
 
       clause.addVar( model.getPageVar(index, page, true));
     }
     model.addClause( clause );
+  }
+
+  for (auto pr : inputGraph.samePage) {
+    int e1 = pr.first;
+    int e2 = pr.second;
+
+    model.addClause( MClause(model.getSamePageVar(e1, e2, true)) );
   }
 
   for (auto pr : inputGraph.nodeTracks) {
@@ -653,10 +546,11 @@ void encodeConstraints(SATModel& model, InputGraph& inputGraph, Params params) {
   }
 }
 
+void encodeTrees(SATModel& model, InputGraph& inputGraph, Params& params);
 void encodeDispersible(SATModel& model, InputGraph& inputGraph, Params& params);
 
 int dispersibleLowerBound(InputGraph& inputGraph, Params& params) {
-  // maxdegree
+  // max degree
   int lb = 0;
   vector<int> degree(inputGraph.nc, 0);
   for (size_t i = 0; i < inputGraph.edges.size(); i++) {
@@ -682,11 +576,11 @@ int stackLowerBound(InputGraph& inputGraph, Params& params) {
 
   int n = inputGraph.nc;
   int m = edges.size();
-  int lb = (m - n + n - 4) / (n - 3);
+  int lb = (m - n + n - 4) / max(n - 3, 1);
   lb = max(lb, 1);
 
   if (params.dispersible) {
-  	lb = max(lb, dispersibleLowerBound(inputGraph, params));
+    lb = max(lb, dispersibleLowerBound(inputGraph, params));
   }
 
   return lb;
@@ -695,17 +589,17 @@ int stackLowerBound(InputGraph& inputGraph, Params& params) {
 int queueLowerBound(InputGraph& inputGraph, Params& params) {
   int n = inputGraph.nc;
   int m = inputGraph.edges.size();
-  int lb = params.pages + 1;
-  for (int k = 0; k <= params.pages; k++) {
+  int lb = params.queues + 1;
+  for (int k = 0; k <= params.queues; k++) {
     int maxEdges = 2*k*n - k*(2*k+1);
     if (maxEdges >= m) {
-    	lb = k;
-    	break;
+      lb = k;
+      break;
     }
   }
 
   if (params.dispersible) {
-  	lb = max(lb, dispersibleLowerBound(inputGraph, params));
+    lb = max(lb, dispersibleLowerBound(inputGraph, params));
   }
 
   return lb;
@@ -722,74 +616,70 @@ int trackLowerBound(InputGraph& inputGraph, Params& params) {
 }
 
 int mixedLowerBound(InputGraph& inputGraph, Params& params) {
-	if (params.pages > 2 || (params.dispersible && dispersibleLowerBound(inputGraph, params) > 2)) {
-		return params.pages + 1;
-	}
 	return 2;
 }
 
 bool runInternal(InputGraph& inputGraph, Params params) {
   int lbPages = -1;
-  int ubPages = params.pages;
+  int ubPages = params.stacks + params.queues;
   if (params.isStack()) {
   	lbPages = stackLowerBound(inputGraph, params);
-    LOG_IF(params.verb, "lower bound for stack thickness: %d", lbPages);
+    LOG_IF(params.verbose, "lower bound for stack thickness: %d", lbPages);
   } else if (params.isQueue()) {
     lbPages = queueLowerBound(inputGraph, params);
-    LOG_IF(params.verb, "lower bound for queue thickness: %d", lbPages);
+    LOG_IF(params.verbose, "lower bound for queue thickness: %d", lbPages);
   } else if (params.isTrack()) {
     lbPages = trackLowerBound(inputGraph, params);
     ubPages = params.tracks;
-    LOG_IF(params.verb, "lower bound for track thickness: %d", lbPages);
+    LOG_IF(params.verbose, "lower bound for track thickness: %d", lbPages);
   } else if (params.isMixed()) {
     lbPages = mixedLowerBound(inputGraph, params);
-    LOG_IF(params.verb, "lower bound for mixed thickness: %d", lbPages);
+    LOG_IF(params.verbose, "lower bound for mixed thickness: %d", lbPages);
   } else {
     ERROR("wrong type of layout");
   }
 
 	if (lbPages > ubPages) {
-    LOG_IF(params.verb, "lower bound exceeds input parameter");
-  	return false;
+      LOG_IF(params.verbose, "lower bound exceeds input parameter");
+  	  return false;
 	}
 
   SATModel model;
 
   // encoding
   if (params.isStack()) {
-    LOG_IF(params.verb, "encoding model for stack embedding...");
+    LOG_IF(params.verbose, "encoding model for stack embedding...");
     encodeStack(model, inputGraph, params);
   } else if (params.isQueue()) {
-    LOG_IF(params.verb, "encoding model for queue embedding...");
+    LOG_IF(params.verbose, "encoding model for queue embedding...");
     encodeQueue(model, inputGraph, params);
   } else if (params.isTrack()) {
-    LOG_IF(params.verb, "encoding model for track embedding...");
+    LOG_IF(params.verbose, "encoding model for track embedding...");
     encodeTrack(model, inputGraph, params);
   } else if (params.isMixed()) {
-    LOG_IF(params.verb, "encoding model for mixed embedding...");
+    LOG_IF(params.verbose, "encoding model for mixed embedding...");
     encodeMixed(model, inputGraph, params);
   }
 
   if (params.trees) {
-    LOG_IF(params.verb, "encoding trees...");
-    encodeTrees(model, inputGraph, params.pages);
+    LOG_IF(params.verbose, "encoding trees...");
+    encodeTrees(model, inputGraph, params);
   }
 
-  LOG_IF(params.verb, "encoding constraints...");
-  encodeConstraints(model, inputGraph, params);
-
   if (params.dispersible) {
-    LOG_IF(params.verb, "encoding dispersible constraints...");
+    LOG_IF(params.verbose, "encoding dispersible constraints...");
     encodeDispersible(model, inputGraph, params);
   }
 
-  LOG_IF(params.verb, "encoded %d variables and %d constraints", model.varCount(), model.clauseCount());
+  encodeCustomConstraints(model, inputGraph, params);
+  
+  LOG_IF(params.verbose, "encoded %d variables and %d constraints", model.varCount(), model.clauseCount());
   model.toDimacs(params.modelFile);
-  LOG_IF(params.verb, "SAT model in dimacs format saved to '%s'", params.modelFile.c_str());
+  LOG_IF(params.verbose, "SAT model in dimacs format saved to '%s'", params.modelFile.c_str());
   return true;
 }
 
-bool run(InputGraph inputGraph, Params params) {
+bool run(InputGraph& inputGraph, Params params) {
 	bool res;
   try {
     res = runInternal(inputGraph, params);

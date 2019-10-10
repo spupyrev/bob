@@ -13,7 +13,7 @@ Basic Setup
 
 2. Run the tool:
 
-        ./bob -i=graph.dot -o=graph.dimacs -type=stack -pages=2 -verbose=true
+        ./bob -i=graphs/graph.dot -o=graph.dimacs -stacks=2
 
     The tool accepts graphs in the [DOT](https://en.wikipedia.org/wiki/DOT_(graph_description_language)) and [GML](https://en.wikipedia.org/wiki/Graph_Modelling_Language) formats. The output is the [DIMACS](http://www.satcompetition.org/2009/format-benchmarks2009.html) format.
 For the list of supported options use:
@@ -25,6 +25,22 @@ For the list of supported options use:
 4. Use the SAT solver to test embeddability of the graph:
 
         ./treengeling graph.dimacs
+
+Examples
+--------
+
+Test whether an input graph can be embedded in 2 [stacks](https://spupyrev.github.io/linearlayouts.html#stack)
+
+        ./bob -i=graphs/graph.dot -o=graph.dimacs -stacks=2
+
+
+Test whether an input graph can be embedded in 2 [queues](https://spupyrev.github.io/linearlayouts.html#queue)
+
+        ./bob -i=graphs/graph.dot -o=graph.dimacs -queues=2
+
+Test whether an input graph admits a [5-track layout](https://spupyrev.github.io/linearlayouts.html#track)
+
+        ./bob -i=graphs/weakly_6tracks.gml -o=graph.dimacs -tracks=5
 
 License
 --------

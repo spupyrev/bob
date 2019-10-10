@@ -107,8 +107,7 @@ public:
 		return (*options.find(optionName)).second;
 	}
 
-	void setOption(const std::string& optionName, const std::string& value)
-	{
+	void setOption(const std::string& optionName, const std::string& value)	{
 		options[optionName] = value;
 	}
 
@@ -118,6 +117,15 @@ public:
 
 	int getInt(const std::string& optionName) const {
 		return to_int(getOption(optionName));
+	}
+
+	void setInt(const std::string& optionName, int value) {
+		if (!options.count(optionName)) {
+			UnrecognizedOption(optionName);
+		}
+
+		assert(options.count(optionName));
+		setOption(optionName, to_string(value));
 	}
 
 	bool getBool(const std::string& optionName) const {
@@ -142,14 +150,12 @@ public:
 		return options.count(optionName) > 0;
 	}
 
-	void UnspecifiedOption(const std::string& optionName) const
-	{
+	void UnspecifiedOption(const std::string& optionName) const	{
 		std::cout << "required option \"" << optionName << "\" is not specified\n";
 		throw 1;
 	}
 
-	void UnrecognizedOption(const std::string& optionName) const
-	{
+	void UnrecognizedOption(const std::string& optionName) const {
 		std::cout << "unrecognized option \"" << optionName << "\"\n";
 		throw 1;
 	}

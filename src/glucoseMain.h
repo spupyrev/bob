@@ -1,35 +1,38 @@
 #pragma once
 
+#include "logging.h"
+
 #include <string>
 #include <vector>
 #include <map>
 
 struct InputGraph {
-  int nc;
-  // vertices are in [0..nc)
+  int nc = -1;
+  // vertices are in [0..nc); first < second
   std::vector<std::pair<int, int>> edges;
+
+  // whether an edge is allowed to be on multiple pages
+  std::vector<bool> multiPage;
 
   // Constraints:
   // first node in the order
-  int firstNode;
+  int firstNode = 0;
   // pair<i, j>  ==>  node_i < node_j in the order
   std::vector<std::pair<int, int>> nodeRel;
   // edge_index -> available colors are in [0..pages)
   std::map<int, std::vector<int>> edgePages;
+  // pair<i, j>  ==>  edge_i and edge_j are in the same page
+  std::vector<std::pair<int, int>> samePage;
   // node -> available tracks are in [0..pages)
   std::map<int, std::vector<int>> nodeTracks;
 
-  InputGraph() {
-    nc = -1;
-    firstNode = 0;
-  }
+  InputGraph() {}
 
-  int findEdgeIndex(int u, int v) {
-    for (int i = 0; i < (int)edges.size(); i++) {
-      if (edges[i].first == u && edges[i].second == v) return i;
-      if (edges[i].first == v && edges[i].second == u) return i;
-    }
-    throw 1;
+  void addNodeRel(int left, int right) {
+    CHECK(left != right);
+    CHECK(0 <= left && left < nc);
+    CHECK(0 <= right && right < nc);
+    nodeRel.push_back(std::make_pair(left, right));
   }
 };
 
@@ -38,25 +41,24 @@ enum Embedding { STACK, QUEUE, TRACK, MIXED };
 struct Params {
   Embedding embedding;
 
+  int stacks;
+  int queues;
+  int tracks;
+
   bool trees;
   bool dispersible;
-  int pages;
-  int tracks;
-  // max edge span (used for Track layouts only)
-  int span;
-
   std::string modelFile;
-  bool verb;
+  int verbose;
 
   Params() {
     embedding = STACK;
+    stacks = 0;
+    queues = 0;
+    tracks = 0;
     trees = false;
     dispersible = false;
-    pages = 0;
-    tracks = 0;
-    span = 0;
     modelFile = "";
-    verb = false;
+    verbose = 0;
   }
 
   bool isStack() const {
@@ -71,6 +73,16 @@ struct Params {
   bool isMixed() const {
     return embedding == MIXED;
   }
+
+  std::string toString() const {
+    std::string s = "";
+    if (trees) s += " trees";
+    if (dispersible) s += " dispersible";
+
+    if (s.length() > 0 && s[0] == ' ') s = s.substr(1);
+    if (s.length() == 0) s = " ";
+    return "[" + s + "]";
+  }
 };
 
-bool run(InputGraph inputGraph, Params params);
+bool run(InputGraph& inputGraph, Params params);

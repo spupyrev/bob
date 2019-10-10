@@ -7,20 +7,18 @@ using namespace std;
 
 void prepareCMDOptions(int argc, char** argv, CMDOptions& args) {
 	string msg;
-	msg += "Usage: be [options]\n";
+	msg += "Usage: bob [options]\n";
 	args.SetUsageMessage(msg);
 
 	args.AddAllowedOption("-i", "", "Input file name (stdin, if no input file is supplied)");
 	args.AddAllowedOption("-o", "", "Output file name (stdout, if no output file is supplied)");
 
-	args.AddAllowedOption("-type", "stack", "Type of layout");
-	args.AddAllowedValue("-type", "stack");
-	args.AddAllowedValue("-type", "queue");
-	args.AddAllowedValue("-type", "mixed");
+  args.AddAllowedOption("-stacks", "0", "The number of stacks to use");
+  args.AddAllowedOption("-queues", "0", "The number of queues to use");
+  args.AddAllowedOption("-tracks", "0", "The number of tracks to use");
 
-	args.AddAllowedOption("-pages", "The number of pages");
-	args.AddAllowedOption("-trees", "false", "Whether every page is a tree");
-	args.AddAllowedOption("-dispersible", "false", "Whether every page is a matching");
+	args.AddAllowedOption("-trees", "false", "Enfore every page to be a tree");
+	args.AddAllowedOption("-dispersible", "false", "Enfore every page to be a matching");
 
 	args.AddAllowedOption("-verbose", "true", "Verbose debug output");
 
@@ -51,30 +49,44 @@ void processGraph(const CMDOptions& options) {
 	  }
   }
 
-  // prepare params
+  // fill params
   Params params;
-  string type = options.getOption("-type");
-  if (type == "stack") {
-    params.embedding = STACK;
-  } else if (type == "queue") {
-    params.embedding = QUEUE;
-  } else if (type == "mixed") {
+  params.stacks = options.getInt("-stacks");
+  params.queues = options.getInt("-queues");
+  params.tracks = options.getInt("-tracks");
+  CHECK(params.stacks + params.queues + params.tracks > 0, "missing page number");
+
+  if (params.tracks > 0) {
+    CHECK(params.stacks == 0 && params.queues == 0, "cannot mix track and stack/queue layouts");
+    params.stacks = 1;
+    params.embedding = TRACK;
+  } else if (params.stacks > 0 && params.queues > 0) {
     params.embedding = MIXED;
+  } else if (params.stacks > 0) {
+    params.embedding = STACK;
+  } else if (params.queues > 0) {
+    params.embedding = QUEUE;
   } else {
     ERROR("unknown embedding type");
   }
-  params.pages = options.getInt("-pages");
+
  	params.trees = options.getBool("-trees");
   params.dispersible = options.getBool("-dispersible");
-  params.verb = options.getBool("-verbose");
+  params.verbose = options.getBool("-verbose") ? 1 : 0;
   params.modelFile = options.getOption("-o");
 
-  LOG_IF(params.verb, "processing graph with %d vertices and %d edges", inputGraph.nc, inputGraph.edges.size());
-  LOG_IF(params.verb, "[type = %s, pages = %d, trees = %d, dispersible = %d]", type.c_str(), params.pages, params.trees, params.dispersible);
+  if (params.verbose) {
+    if (params.isStack() || params.isQueue() || params.isMixed()) {
+      string ps = params.isStack() ? "stacks" : params.isQueue() ? "queues" : "stack+queue";
+      LOG("processing graph with %d vertices and %d edges on %d %s with params: %s", inputGraph.nc, inputGraph.edges.size(), params.stacks + params.queues, ps.c_str(), params.toString().c_str());
+    } else if (params.isTrack()) {
+      LOG("processing graph with %d vertices and %d edges on %d tracks with params: %s", inputGraph.nc, inputGraph.edges.size(), params.tracks, params.toString().c_str());
+    }
+  }
 
 	bool res = run(inputGraph, params);
 	if (!res) {
-		LOG("embedding with %d pages does not exist", params.pages);
+		LOG("embedding does not exist");
 	}
 }
 
@@ -82,15 +94,11 @@ int main(int argc, char *argv[]) {
 	auto options = CMDOptions::Create();
 
 	int returnCode = 0;
-	try
-	{
+	try	{
 		prepareCMDOptions(argc, argv, *options);
 		processGraph(*options);
-	}
-	catch (int code)
-	{
+	} catch (int code) {
 		returnCode = code;
-		LOG("exit code: %d", returnCode);
 	}
 
 	return returnCode;

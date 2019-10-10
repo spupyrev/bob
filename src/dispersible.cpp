@@ -27,9 +27,8 @@ void addRelClause(SATModel& model, const vector<int>& v1, const vector<int>& v2,
 }
 
 void encodeDispersible(SATModel& model, InputGraph& inputGraph, Params& params) {
-  int pageCount = params.pages;
   int n = inputGraph.nc;
-  int m = inputGraph.edges.size();
+  int m = (int)inputGraph.edges.size();
   CHECK(n > 0 && m > 0);
 
   // adjacent edges on different pages
@@ -37,29 +36,16 @@ void encodeDispersible(SATModel& model, InputGraph& inputGraph, Params& params) 
     for (int j = i + 1; j < m; j++) {
       int i1 = inputGraph.edges[i].first;
       int i2 = inputGraph.edges[i].second;
-      CHECK(i1 != i2);
-      if (i1 > i2) swap(i1, i2);
+      CHECK(i1 < i2);
 
       int j1 = inputGraph.edges[j].first;
       int j2 = inputGraph.edges[j].second;
-      CHECK(j1 != j2);
-      if (j1 > j2) swap(j1, j2);
+      CHECK(j1 < j2);
 
       if (i1 != j1 && i1 != j2 && i2 != j1 && i2 != j2) continue;
 
       model.addClause( MClause(model.getSamePageVar(i, j, false)) );
     }
   }
-
-  // fixing pages of edges incident to a node
-  int page = 0;
-  for (int i = 0; i < m; i++) {
-    int i1 = inputGraph.edges[i].first;
-    int i2 = inputGraph.edges[i].second;
-    if (i1 == inputGraph.firstNode || i2 == inputGraph.firstNode) {
-      CHECK(page < pageCount);
-      model.addClause( MClause(model.getPageVar(i, page, true)) );
-      page++;
-    }
-  }
 }
+
