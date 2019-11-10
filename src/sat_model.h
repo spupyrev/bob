@@ -2,6 +2,7 @@
 
 #include "logging.h"
 
+#include <sstream>
 #include <fstream>
 #include <string>
 #include <vector>
@@ -82,6 +83,10 @@ class SATModel {
   map<pair<int, int>, int> trackVars;
   // same track variables
   map<pair<int, int>, int> stVars;
+
+  // solution (provided by an external solver)
+  std::string externalResult = ""; // not provided
+  map<int, bool> externalVars;
 
  public:
   SATModel() {
@@ -203,6 +208,52 @@ class SATModel {
       }
       out << "0\n";
     }
+  }
+
+  std::string fromDimacs(const string& filename) {
+    std::ifstream in;
+    in.open(filename);
+    std::string line;
+    std::string externalResult = "";
+    while (std::getline(in, line)) {
+      std::istringstream iss(line);
+      char mode;
+      if (!(iss >> mode)) {break;} // hmm
+      if (mode == 's') {
+        // result
+        iss >> externalResult;
+      } else if (mode == 'v') {
+        // var
+        int vv;
+        while (iss >> vv) {
+          if (vv > 0) {
+            int id = vv - 1;
+            CHECK(externalVars.find(id) == externalVars.end());
+            externalVars[id] = true;
+          } else if (vv < 0) {
+            int id = -vv - 1;
+            CHECK(externalVars.find(id) == externalVars.end());
+            externalVars[id] = false;
+          }  
+        }
+      }
+    }    
+    in.close();
+    CHECK(externalResult != "");
+    if (externalResult == "SATISFIABLE" && externalVars.size() != varCount()) {
+      ERROR("incorrect number of variables in '" + filename + "': " + std::to_string(varCount()) + " != " + std::to_string(externalVars.size()));
+    }
+    return externalResult;
+  }
+
+  bool value(int id) {
+    CHECK(externalVars.count(id));
+    return externalVars[id];
+  }
+
+  bool value(MVar v) {
+    CHECK(externalVars.count(v.id));
+    return externalVars[v.id] ? v.positive : !v.positive;
   }
 
   size_t varCount() {

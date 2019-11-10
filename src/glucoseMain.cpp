@@ -619,6 +619,166 @@ int mixedLowerBound(InputGraph& inputGraph, Params& params) {
 	return 2;
 }
 
+void printResult(InputGraph& inputGraph, Params& params, const std::vector<int>& order, const std::vector<int>& pages, const std::vector<int>& tracks) {
+  auto& id2label = inputGraph.id2label;
+  auto& edges = inputGraph.edges;
+
+  auto coutLabel = [&](const string& label) {
+    cout << "\e[38;1;255m" << label << "\e[0m";
+  };
+
+  cout << "\033[90m" << "order:  " << "\033[0m" << "[";
+  for (size_t i = 0; i < order.size(); i++) {
+    if (i > 0) cout << " ";
+    string label = id2label[order[i]];
+    coutLabel(label);
+  }
+  cout << "]\n";
+
+  vector<int> index(inputGraph.nc, -1);
+  for (int i = 0; i < (int) order.size(); i++) {
+    index[order[i]] = i;
+  }
+
+  auto naturalCompare = [](const string& l, const string& r) {
+    // - numeric string are compared by their int values
+    // - everything else is converted to lowercase
+    // - gen values are at the end
+    for (size_t i = 0; i < l.length() && i < r.length(); i++) {
+      char cl = std::toupper(l[i]);
+      char cr = std::toupper(r[i]);
+      if (cl != cr) {
+        if (isalpha(cl) && !isalpha(cr)) return true;
+        if (!isalpha(cl) && isalpha(cr)) return false;
+        return cl < cr;
+      }
+    }
+    return l < r;
+  };
+
+  int numPages = params.stacks + params.queues;
+  for (int i = 0; i < numPages; i++) {
+    cout << "\033[90m" << "page " << i << ":" << "\033[0m";
+    vector<pair<int, int>> pe;
+    for (size_t j = 0; j < edges.size(); j++) {
+      if (pages[j] == i) {
+        pe.push_back(edges[j]);
+      }
+    }
+    sort(pe.begin(), pe.end(), [&](const pair<int, int>& e1, const pair<int, int>& e2) {
+      auto m1 = id2label[e1.first];
+      auto M1 = id2label[e1.second];
+      auto m2 = id2label[e2.first];
+      auto M2 = id2label[e2.second];
+      if (m1 != m2) return naturalCompare(m1, m2);
+      return naturalCompare(M1, M2);;
+    });
+    int len = 0;
+    for (size_t j = 0; j < pe.size(); j++) {
+      cout << " (";
+      coutLabel(id2label[pe[j].first]);
+      cout << ",";
+      coutLabel(id2label[pe[j].second]);
+      cout << ")";
+      len += 4 + id2label[pe[j].first].length() + id2label[pe[j].second].length();
+      if (len > 180 && j + 1 != pe.size()) {
+        cout << "\n       ";
+        len = 0;
+      }
+    }
+    cout << "\n";
+  }
+
+  if (tracks.size() > 0) {
+    auto tr = vector<vector<int>>(params.tracks, vector<int>());
+    for (size_t i = 0; i < order.size(); i++) {
+      int v = order[i];
+      tr[tracks[v]].push_back(v);
+    }
+
+    for (int i = 0; i < params.tracks; i++) {
+      cout << "\033[90m" << "track " << i << ":" << "\033[0m";
+      for (size_t j = 0; j < tr[i].size(); j++) {
+        cout << " " << id2label[tr[i][j]];
+      }
+      cout << "\n";
+    }
+  }
+}
+
+bool fillResult(InputGraph& inputGraph, Params& params, SATModel& model) {
+  // vertices are in [0..nc)
+  std::vector<int> order;
+  // pages are in [0..pages)
+  std::vector<int> pages;
+  // tracks are in [0..tracks)
+  std::vector<int> tracks;
+
+  // fill order
+  order = std::vector<int>(inputGraph.nc, -1);
+  for (int i = 0; i < inputGraph.nc; i++) {
+    int countSmaller = 0;
+    for (int j = 0; j < inputGraph.nc; j++) {
+      if (i != j && model.value(model.getRelVar(i, j, true))) countSmaller++;
+    }
+    CHECK(order[inputGraph.nc - countSmaller - 1] == -1);
+    order[inputGraph.nc - countSmaller - 1] = i;
+  }
+
+  // fill edge pages
+  for (size_t j = 0; j < inputGraph.edges.size(); j++) {
+    bool multi = inputGraph.multiPage.size() == inputGraph.edges.size() && inputGraph.multiPage[j];
+    int page = -1;
+    int cnt = 0;
+    for (int k = 0; k < params.stacks + params.queues; k++) {
+      if (model.value(model.getPageVar(j, k, true))) {
+        page = k;
+        cnt++;
+      }
+    }
+    if (cnt > 1 && !multi) {
+      std::cerr << "multiple pages for edge " << j << "\n";
+      return false;
+    }
+    if (page == -1) {
+      std::cerr << "page not found for edge " << j << "\n";
+      return false;
+    }
+    pages.push_back(page);
+  }
+
+  // fill vertex tracks
+  if (params.isTrack()) {
+    for (size_t i = 0; i < inputGraph.edges.size(); i++) {
+      auto e = inputGraph.edges[i];
+      CHECK(!model.value(model.getSameTrackVar(e.first, e.second, true)));
+    }
+
+    for (int j = 0; j < inputGraph.nc; j++) {
+      int track = -1;
+      int cnt = 0;
+      for (int k = 0; k < params.tracks; k++) {
+        if (model.value(model.getTrackVar(j, k, true))) {
+          track = k;
+          cnt++;
+        }
+      }
+      if (cnt > 1) {
+        std::cerr << "multiple tracks for node " << j << "\n";
+        return false;
+      }
+      if (track == -1) {
+        std::cerr << "track not found for node " << j << "\n";
+        return false;
+      }
+      tracks.push_back(track);
+    }
+  }
+
+  printResult(inputGraph, params, order, pages, tracks);
+  return true;
+}
+
 bool runInternal(InputGraph& inputGraph, Params params) {
   int lbPages = -1;
   int ubPages = params.stacks + params.queues;
@@ -674,9 +834,20 @@ bool runInternal(InputGraph& inputGraph, Params params) {
   encodeCustomConstraints(model, inputGraph, params);
   
   LOG_IF(params.verbose, "encoded %d variables and %d constraints", model.varCount(), model.clauseCount());
-  model.toDimacs(params.modelFile);
-  LOG_IF(params.verbose, "SAT model in dimacs format saved to '%s'", params.modelFile.c_str());
-  return true;
+  if (params.modelFile != "") {
+    model.toDimacs(params.modelFile);
+    LOG_IF(params.verbose, "SAT model in dimacs format saved to '%s'", params.modelFile.c_str());
+    return true;
+  } 
+
+  auto externalResult = model.fromDimacs(params.resultFile);
+  if (externalResult == "SATISFIABLE") {
+    CHECK(fillResult(inputGraph, params, model), "cannot construct layout from SAT assignment");
+    return true;
+  } 
+
+  CHECK(externalResult == "UNSATISFIABLE", "unexpected SAT status: " + externalResult);
+  return false;
 }
 
 bool run(InputGraph& inputGraph, Params params) {

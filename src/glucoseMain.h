@@ -11,6 +11,11 @@ struct InputGraph {
   // vertices are in [0..nc); first < second
   std::vector<std::pair<int, int>> edges;
 
+  // custom labels for edges
+  std::map<int, std::string> id2label;
+  // reverse mapping
+  std::map<std::string, int> label2id;
+
   // whether an edge is allowed to be on multiple pages
   std::vector<bool> multiPage;
 
@@ -39,27 +44,21 @@ struct InputGraph {
 enum Embedding { STACK, QUEUE, TRACK, MIXED };
 
 struct Params {
-  Embedding embedding;
+  Embedding embedding = STACK;
 
-  int stacks;
-  int queues;
-  int tracks;
+  int stacks = 0;
+  int queues = 0;
+  int tracks = 0;
 
-  bool trees;
-  bool dispersible;
-  std::string modelFile;
-  int verbose;
+  bool trees = false;
+  bool dispersible = false;
+  int verbose = 0;
+  // Dimacs input/output
+  std::string modelFile = "";
+  std::string resultFile = "";
 
-  Params() {
-    embedding = STACK;
-    stacks = 0;
-    queues = 0;
-    tracks = 0;
-    trees = false;
-    dispersible = false;
-    modelFile = "";
-    verbose = 0;
-  }
+
+  Params() {}
 
   bool isStack() const {
     return embedding == STACK;

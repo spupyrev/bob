@@ -11,7 +11,8 @@ void prepareCMDOptions(int argc, char** argv, CMDOptions& args) {
 	args.SetUsageMessage(msg);
 
 	args.AddAllowedOption("-i", "", "Input file name (stdin, if no input file is supplied)");
-	args.AddAllowedOption("-o", "", "Output file name (stdout, if no output file is supplied)");
+  args.AddAllowedOption("-o", "", "Output file name (stdout, if no output file is supplied)");
+  args.AddAllowedOption("-result", "", "Resulting assignment in Dimacs format");
 
   args.AddAllowedOption("-stacks", "0", "The number of stacks to use");
   args.AddAllowedOption("-queues", "0", "The number of queues to use");
@@ -37,7 +38,11 @@ void processGraph(const CMDOptions& options) {
 
   // create graph
   InputGraph inputGraph;
-  inputGraph.nc = graph.nodes.size();
+  inputGraph.nc = (int)graph.nodes.size();
+  for (int i = 0; i < inputGraph.nc; i++) {
+    inputGraph.id2label[i] = graph.nodes[i]->id;
+    inputGraph.label2id[graph.nodes[i]->id] = i;
+  }
   for (size_t i = 0; i < graph.edges.size(); i++) {
   	auto s = graph.getNode(graph.edges[i]->source);
   	auto t = graph.getNode(graph.edges[i]->target);
@@ -74,6 +79,9 @@ void processGraph(const CMDOptions& options) {
   params.dispersible = options.getBool("-dispersible");
   params.verbose = options.getBool("-verbose") ? 1 : 0;
   params.modelFile = options.getOption("-o");
+  params.resultFile = options.getOption("-result");
+
+  CHECK(params.modelFile == "" || params.resultFile == "", "only one of ['-o', '-result'] can be provided");
 
   if (params.verbose) {
     if (params.isStack() || params.isQueue() || params.isMixed()) {
