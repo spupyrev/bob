@@ -7,6 +7,7 @@
 #include <string>
 #include <vector>
 #include <map>
+#include <zlib.h>
 
 using namespace std;
 
@@ -64,6 +65,13 @@ struct MClause {
     vars.push_back(v2);
   }
 
+  MClause(const MClause& clause, const MVar& v1, const MVar& v2, const MVar& v3) {
+    vars.insert(vars.end(), clause.vars.begin(), clause.vars.end());
+    vars.push_back(v1);
+    vars.push_back(v2);
+    vars.push_back(v3);
+  }
+
   void addVar(const MVar& v1) {
     vars.push_back(v1);
   }
@@ -71,21 +79,25 @@ struct MClause {
 
 class SATModel {
   vector<MClause> clauses;
-  int curId;
+  int curId = 0;
 
+ public:
   // relative order variables
   map<pair<int, int>, int> relVars;
   // page variables [edge_index][page]
   map<pair<int, int>, int> pageVars;
   // same-page variables
   map<pair<int, int>, int> spVars;
+  // adjacent-vertices variables
+  map<pair<int, int>, int> adjVars;
   // track variables [node_index][page]
   map<pair<int, int>, int> trackVars;
   // same track variables
   map<pair<int, int>, int> stVars;
+  // page type variables: true=stack, false=queue
+  map<int, int> pageTypeVars;
 
   // solution (provided by an external solver)
-  std::string externalResult = ""; // not provided
   map<int, bool> externalVars;
 
  public:
@@ -106,6 +118,7 @@ class SATModel {
   MVar getRelVar(int i, int j, bool positive) const {
     CHECK(i != j);
     pair<int, int> pair;
+
     if (i < j) {
       pair = make_pair(i, j);
     } else {
@@ -118,7 +131,9 @@ class SATModel {
   }
 
   void addRelVar(int i, int j) {
-    if (i >= j) return;
+    if (i >= j) {
+      return;
+    }
 
     int var = addVar();
     CHECK(relVars.count(make_pair(i, j)) == 0);
@@ -137,6 +152,18 @@ class SATModel {
     auto pair = make_pair(edge, page);
     CHECK(pageVars.count(pair) == 0);
     pageVars[pair] = var;
+  }
+
+  void addPageTypeVar(int page) {
+    int var = addVar();
+    CHECK(pageTypeVars.count(page) == 0);
+    pageTypeVars[page] = var;
+  }
+
+  MVar getPageTypeVar(int page, bool positive) const {
+    CHECK(pageTypeVars.count(page));
+    int index = (*pageTypeVars.find(page)).second;
+    return MVar(index, positive);
   }
 
   MVar getTrackVar(int node, int page, bool positive) const {
@@ -182,30 +209,56 @@ class SATModel {
     stVars[pair] = var;
   }
 
-  void toDimacs(const string& filename) {
-  	if (filename == "") {
-  		toDimacs(cout);
-  	} else {
-	    std::ofstream out;
-  	  out.open(filename);
-  	  toDimacs(out);
-  	  out.close();
-  	}
+  MVar getAdjVar(int i, int j, bool positive) const {
+    CHECK(i != j);
+    pair<int, int> pair;
+    pair = make_pair(i, j);
+    CHECK(adjVars.count(pair));
+    int index = (*adjVars.find(pair)).second;
+    return MVar(index, positive);
   }
 
-  void toDimacs(ostream& out) {
+  void addAdjVar(int i, int j) {
+    int var = addVar();
+    CHECK(adjVars.count(make_pair(i, j)) == 0);
+    adjVars[make_pair(i, j)] = var;
+  }
+  void toDimacs(const string& filename) {
+    std::string ext = filename.substr(filename.find_last_of(".") + 1);
+
+    if (ext == "gz") {
+      // zlib
+      std::ostringstream oss;
+      toDimacs(oss);
+      const auto& content = oss.str(); // make it "const auto content = " if there are issues
+      gzFile out = gzopen(filename.c_str(), "wb9");
+      gzwrite(out, content.c_str(), content.length());
+      gzclose(out);
+    } else {
+      // usual route
+      std::ofstream out;
+      out.open(filename);
+      toDimacs(out);
+      out.close();
+    }
+  }
+
+  void toDimacs(std::ostream& out) {
     int nvars = varCount();
     out << "p cnf " << nvars << " " << clauseCount() << "\n";
+
     for (auto& c : clauses) {
       for (auto& l : c.vars) {
-        int var = l.id + 1;
+	      int var = l.id + 1;
         CHECK(1 <= var && var <= nvars);
+
         if (l.positive) {
           out << var << " ";
         } else {
           out << "-" << var << " ";
         }
       }
+
       out << "0\n";
     }
   }
@@ -215,16 +268,22 @@ class SATModel {
     in.open(filename);
     std::string line;
     std::string externalResult = "";
+
     while (std::getline(in, line)) {
       std::istringstream iss(line);
       char mode;
-      if (!(iss >> mode)) {break;} // hmm
+
+      if (!(iss >> mode)) {
+        break; // hmm
+      }
+
       if (mode == 's') {
         // result
         iss >> externalResult;
       } else if (mode == 'v') {
         // var
         int vv;
+
         while (iss >> vv) {
           if (vv > 0) {
             int id = vv - 1;
@@ -234,15 +293,18 @@ class SATModel {
             int id = -vv - 1;
             CHECK(externalVars.find(id) == externalVars.end());
             externalVars[id] = false;
-          }  
+          }
         }
       }
-    }    
+    }
+
     in.close();
     CHECK(externalResult != "");
+
     if (externalResult == "SATISFIABLE" && externalVars.size() != varCount()) {
       ERROR("incorrect number of variables in '" + filename + "': " + std::to_string(varCount()) + " != " + std::to_string(externalVars.size()));
     }
+
     return externalResult;
   }
 
@@ -257,7 +319,7 @@ class SATModel {
   }
 
   size_t varCount() {
-    return curId;
+	  return curId;
   }
 
   size_t clauseCount() {

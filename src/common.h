@@ -10,25 +10,34 @@ const double PI = 3.14159265358979323846;
 
 template<class T>
 T Abs(const T& t) {
-	if ( t > 0 ) return t;
-	return -t;
+  if (t > 0) {
+    return t;
+  }
+
+  return -t;
 }
 
 template<class T>
 T Sgn(const T& t) {
-	if ( t > 0 ) return 1;
-	if ( t < 0 ) return -1;
-	return 0;
+  if (t > 0) {
+    return 1;
+  }
+
+  if (t < 0) {
+    return -1;
+  }
+
+  return 0;
 }
 
 template<class T>
 T Sqr2(const T& t) {
-	return ((t) * (t));
+  return ((t) * (t));
 }
 
 template <typename T>
 std::string to_string(const T& n) {
-	std::ostringstream ss;
+  std::ostringstream ss;
   ss << n;
   return ss.str();
 }
@@ -36,23 +45,28 @@ std::string to_string(const T& n) {
 template <typename T>
 std::string to_string(const std::vector<T>& vec) {
   std::string desc = "";
+
   for (auto p : vec) {
-    if (desc.length() > 0) desc += " ";
+    if (desc.length() > 0) {
+      desc += " ";
+    }
+
     desc += to_string(p);
   }
+
   return desc;
 }
 
 inline int to_int(const std::string& s) {
-	int n;
-	std::istringstream (s) >> n;
-	return n;
+  int n;
+  std::istringstream(s) >> n;
+  return n;
 }
 
 inline double to_double(const std::string& s) {
-	double n;
-	std::istringstream (s) >> n;
-	return n;
+  double n;
+  std::istringstream(s) >> n;
+  return n;
 }
 
 struct Rand {
@@ -64,10 +78,21 @@ struct Rand {
   static int next();
   static int next(int bound);
   static int next(int lower, int upper);
-  static void shuffle(std::vector<size_t>& vec);
-  static void shuffle(std::vector<int>& vec);
+  template<typename RandomIt>
+  static void shuffle(RandomIt first, RandomIt last);
   static std::vector<int> permutation(size_t n);
 };
+
+template<typename RandomIt>
+void Rand::shuffle(RandomIt first, RandomIt last) {
+  typename std::iterator_traits<RandomIt>::difference_type i, n;
+  n = last - first;
+  for (i = n-1; i > 0; --i) {
+    std::swap(first[i], first[Rand::next(i + 1)]);
+  }
+}
+
+std::vector<int> identity(size_t n);
 
 std::vector<std::string> SplitNotNull(const std::string& s, const std::string& c);
 std::vector<int> SplitNotNullInt(const std::string& s, const std::string& c);

@@ -1,6 +1,7 @@
 # Variables
 CXX = g++
-CXXFLAGS = -Isrc -Wall -Wno-unknown-pragmas -O3 -std=c++11
+CXXFLAGS = -Isrc -Wall -std=c++11 -O3 -g
+LDFLAGS = -Wall -lz -g
 
 HEADERS = $(wildcard **/*.h)
 
@@ -25,7 +26,7 @@ noomp: $(TARGET)
 ## Rule for making the actual target
 $(TARGET): $(OBJECTS)
 	@echo "Linking object files to target $@..."
-	$(CXX) $(LDFLAGS) -o $@ $^
+	$(CXX) $^ $(LDFLAGS) -o $@
 	@echo "-- Link finished --"
 
 ## Generic compilation rule for object files from cpp files

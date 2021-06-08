@@ -1,7 +1,8 @@
 #include "logging.h"
 #include "glucoseMain.h"
 #include "cmd_options.h"
-#include "dot_graph.h"
+#include "io_graph.h"
+#include "graph_parser.h"
 
 using namespace std;
 
@@ -18,18 +19,19 @@ void prepareCMDOptions(int argc, char** argv, CMDOptions& args) {
   args.AddAllowedOption("-queues", "0", "The number of queues to use");
   args.AddAllowedOption("-tracks", "0", "The number of tracks to use");
 
-	args.AddAllowedOption("-trees", "false", "Enfore every page to be a tree");
-	args.AddAllowedOption("-dispersible", "false", "Enfore every page to be a matching");
+	args.AddAllowedOption("-trees", "false", "Whether every page is a tree");
+	args.AddAllowedOption("-dispersible", "false", "Whether every page is a matching");
+	args.AddAllowedOption("-directed", "false", "Whether the input graph is directed");
 
-	args.AddAllowedOption("-verbose", "true", "Verbose debug output");
+  args.AddAllowedOption("-verbose", "0", "Verbose debug output");
 
 	args.Parse(argc, argv);
 }
 
-void processGraph(const CMDOptions& options) {
+void process(const CMDOptions& options) {
 	// input
-	DotGraph graph;
-	DotParser parser;
+	IOGraph graph;
+	GraphParser parser;
 	if (!parser.readGraph(options.getOption("-i"), graph)) {
 		string file = options.getOption("-i");
 		if (file.length() == 0) file = "stdin";
@@ -40,22 +42,29 @@ void processGraph(const CMDOptions& options) {
   InputGraph inputGraph;
   inputGraph.nc = (int)graph.nodes.size();
   for (int i = 0; i < inputGraph.nc; i++) {
-    inputGraph.id2label[i] = graph.nodes[i]->id;
-    inputGraph.label2id[graph.nodes[i]->id] = i;
+    inputGraph.id2label[i] = graph.nodes[i].id;
+    inputGraph.label2id[graph.nodes[i].id] = i;
   }
   for (size_t i = 0; i < graph.edges.size(); i++) {
-  	auto s = graph.getNode(graph.edges[i]->source);
-  	auto t = graph.getNode(graph.edges[i]->target);
+  	auto s = graph.getNode(graph.edges[i].source);
+  	auto t = graph.getNode(graph.edges[i].target);
+  	CHECK(s->index != t->index, "Self-edges are not supported");
 
   	if (s->index < t->index) {
 	    inputGraph.edges.push_back(make_pair(s->index, t->index));
-	  } else if (s->index > t->index) {
+	    inputGraph.direction.push_back(true);
+	  } else {
 	    inputGraph.edges.push_back(make_pair(t->index, s->index));
+	    inputGraph.direction.push_back(false);
 	  }
   }
 
-  // fill params
+  // prepare params
   Params params;
+ 	params.trees = options.getBool("-trees");
+  params.dispersible = options.getBool("-dispersible");
+  params.directed = options.getBool("-directed");
+  params.verbose = options.getInt("-verbose");
   params.stacks = options.getInt("-stacks");
   params.queues = options.getInt("-queues");
   params.tracks = options.getInt("-tracks");
@@ -72,12 +81,9 @@ void processGraph(const CMDOptions& options) {
   } else if (params.queues > 0) {
     params.embedding = QUEUE;
   } else {
-    ERROR("unknown embedding type");
+    ERROR("unknown type of layout");
   }
 
- 	params.trees = options.getBool("-trees");
-  params.dispersible = options.getBool("-dispersible");
-  params.verbose = options.getBool("-verbose") ? 1 : 0;
   params.modelFile = options.getOption("-o");
   params.resultFile = options.getOption("-result");
 
@@ -94,7 +100,7 @@ void processGraph(const CMDOptions& options) {
 
 	bool res = run(inputGraph, params);
 	if (!res) {
-		LOG("embedding does not exist");
+		LOG("layout does not exist");
 	}
 }
 
@@ -102,10 +108,10 @@ int main(int argc, char *argv[]) {
 	auto options = CMDOptions::Create();
 
 	int returnCode = 0;
-	try	{
+	try {
 		prepareCMDOptions(argc, argv, *options);
-		processGraph(*options);
-	} catch (int code) {
+		process(*options);
+	}	catch (int code) {
 		returnCode = code;
 	}
 
