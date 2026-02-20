@@ -7,9 +7,4 @@ authors:
     given-names: "Sergey"
 repository-code: "https://github.com/spupyrev/bob"
 url: "https://github.com/spupyrev/bob"
-preferred-citation:
-  type: article
-  title: "A SAT-based solver for constructing optimal linear layouts of graphs"
-  authors:
-    - family-names: "Pupyrev"
-      given-names: "Sergey"
+year: 2017
