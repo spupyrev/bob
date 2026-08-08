@@ -1,35 +1,40 @@
-# Variables
-CXX = g++
-CXXFLAGS = -Isrc -Wall -std=c++11 -O3 -g
-LDFLAGS = -Wall -lz -g
+CXX ?= g++
 
-HEADERS = $(wildcard **/*.h)
+CPPFLAGS += -Isrc
+CXXFLAGS += -Wall -Wextra -Wno-unused-parameter -std=c++17 -pthread
+LDLIBS += -lz -pthread
 
-SOURCES = $(wildcard src/*.cpp)
+TARGET := build/bob
+DEBUG_TARGET := build/bob_debug
 
-# Targets
-TARGET = bob
+SOURCES := $(wildcard src/bob/*.cpp)
+OBJECTS := $(SOURCES:src/%.cpp=build/obj/%.o)
+DEBUG_OBJECTS := $(SOURCES:src/%.cpp=build/debug/%.o)
+DEPFILES := $(OBJECTS:.o=.d) $(DEBUG_OBJECTS:.o=.d)
 
-OBJECTS = $(SOURCES:src/%.cpp=build/%.o)
+.PHONY: all debug d clean
+.DEFAULT_GOAL := all
 
-## Default rule executed
 all: $(TARGET)
-	@true
+debug d: $(DEBUG_TARGET)
 
-## Clean Rule
-clean:
-	$(RM) $(TARGET) $(OBJECTS)
-
-noomp: $(TARGET)
-	@true
-
-## Rule for making the actual target
 $(TARGET): $(OBJECTS)
-	@echo "Linking object files to target $@..."
-	$(CXX) $^ $(LDFLAGS) -o $@
-	@echo "-- Link finished --"
+	@echo "Linking $@"
+	$(CXX) $^ $(LDFLAGS) $(LDLIBS) -o $@
 
-## Generic compilation rule for object files from cpp files
-build/%.o : src/%.cpp $(HEADERS) Makefile
-	@mkdir -p $(dir $@)
-	$(CXX) $(CXXFLAGS) -c $< -o $@
+$(DEBUG_TARGET): $(DEBUG_OBJECTS)
+	@echo "Linking $@"
+	$(CXX) $^ $(LDFLAGS) $(LDLIBS) -o $@
+
+build/obj/%.o: CXXFLAGS += -O3 -g
+build/debug/%.o: CXXFLAGS += -O0 -g3 -DDEBUG
+
+build/obj/%.o build/debug/%.o: src/%.cpp Makefile
+	@mkdir -p $(@D)
+	@echo "Compiling $<"
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -MMD -MP -c $< -o $@
+
+clean:
+	$(RM) -r build
+
+-include $(DEPFILES)
