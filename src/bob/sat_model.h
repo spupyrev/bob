@@ -1,6 +1,7 @@
 #pragma once
 
 #include "logging.h"
+#include "glucose/SolverSimp21.h"
 
 #include <sstream>
 #include <fstream>
@@ -97,7 +98,7 @@ class SATModel {
   // page type variables: true=stack, false=queue
   map<int, int> pageTypeVars;
 
-  // solution (provided by an external solver)
+  // solution provided by the embedded or an external solver
   map<int, bool> externalVars;
 
  public:
@@ -223,6 +224,37 @@ class SATModel {
     CHECK(adjVars.count(make_pair(i, j)) == 0);
     adjVars[make_pair(i, j)] = var;
   }
+
+  void initSolver(Simp21::Solver& solver) {
+    for (int i = 0; i < curId; i++) {
+      auto var = solver.newVar();
+      CHECK(var == i);
+    }
+
+    for (auto& c : clauses) {
+      Simp21::vec<Simp21::Lit> clause;
+
+      for (auto& literal : c.vars) {
+        CHECK(0 <= literal.id && literal.id < curId);
+        auto solverLiteral = Simp21::mkLit(literal.id);
+        clause.push(literal.positive ? solverLiteral : ~solverLiteral);
+      }
+
+      solver.addClause_(clause);
+    }
+  }
+
+  void loadSolution(const Simp21::Solver& solver) {
+    CHECK(solver.model.size() == curId);
+    externalVars.clear();
+
+    for (int i = 0; i < curId; i++) {
+      auto value = solver.modelValue(i);
+      CHECK(value != l_Undef);
+      externalVars[i] = value == l_True;
+    }
+  }
+
   void toDimacs(const string& filename) {
     std::string ext = filename.substr(filename.find_last_of(".") + 1);
 

@@ -1269,15 +1269,32 @@ bool runInternal(InputGraph& inputGraph, Params params) {
     model.toDimacs(params.modelFile);
     LOG_IF(params.verbose, "SAT model in dimacs format saved to '%s'", params.modelFile.c_str());
     return true;
-  } 
+  }
 
-  auto externalResult = model.fromDimacs(params.resultFile);
-  if (externalResult == "SATISFIABLE") {
+  if (params.resultFile != "") {
+    auto externalResult = model.fromDimacs(params.resultFile);
+    if (externalResult == "SATISFIABLE") {
+      CHECK(fillResult(inputGraph, params, model), "cannot construct layout from SAT assignment");
+      return true;
+    }
+
+    CHECK(externalResult == "UNSATISFIABLE", "unexpected SAT status: " + externalResult);
+    return false;
+  }
+
+  Simp21::Solver solver;
+  solver.verbosity = params.verbose;
+  model.initSolver(solver);
+  LOG_IF(params.verbose, "solving SAT model with %d variables and %d constraints...", model.varCount(), model.clauseCount());
+
+  auto result = solver.okay() ? solver.solve() : l_False;
+  if (result == l_True) {
+    model.loadSolution(solver);
     CHECK(fillResult(inputGraph, params, model), "cannot construct layout from SAT assignment");
     return true;
-  } 
+  }
 
-  CHECK(externalResult == "UNSATISFIABLE", "unexpected SAT status: " + externalResult);
+  CHECK(result == l_False, "embedded SAT solver returned an indeterminate result");
   return false;
 }
 

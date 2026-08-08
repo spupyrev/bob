@@ -7,16 +7,18 @@ LDLIBS += -lz -pthread
 TARGET := build/bob
 DEBUG_TARGET := build/bob_debug
 
-SOURCES := $(wildcard src/bob/*.cpp)
+SOURCES := $(wildcard src/bob/*.cpp) $(wildcard src/glucose/*.cpp)
 OBJECTS := $(SOURCES:src/%.cpp=build/obj/%.o)
 DEBUG_OBJECTS := $(SOURCES:src/%.cpp=build/debug/%.o)
 DEPFILES := $(OBJECTS:.o=.d) $(DEBUG_OBJECTS:.o=.d)
 
-.PHONY: all debug d clean
+.PHONY: all debug d test clean
 .DEFAULT_GOAL := all
 
 all: $(TARGET)
 debug d: $(DEBUG_TARGET)
+test: $(TARGET)
+	./tests/run_tests.sh ./$(TARGET)
 
 $(TARGET): $(OBJECTS)
 	@echo "Linking $@"
