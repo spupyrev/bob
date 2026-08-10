@@ -258,6 +258,8 @@ struct Params {
   int verbose = 0;
   // whether to apply symmetry-breaking constraints using BreakID
   bool applyBreakID = false;
+  // whether to apply symmetry-breaking constraints using Satsuma
+  bool applySatsuma = false;
   // Dimacs input/output
   std::string modelFile = "";
   std::string resultFile = "";

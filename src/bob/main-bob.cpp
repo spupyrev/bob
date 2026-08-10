@@ -22,6 +22,7 @@ void prepareCMDOptions(int argc, char** argv, CMDOptions& args) {
 	args.AddAllowedOption("-trees", "false", "Whether every page is a tree");
 	args.AddAllowedOption("-dispersible", "false", "Whether every page is a matching");
 	args.AddAllowedOption("-directed", "false", "Whether the input graph is directed");
+	args.AddAllowedOption("-satsuma", "false", "Whether to apply Satsuma symmetry detection");
 
   args.AddAllowedOption("-verbose", "0", "Verbose debug output");
 
@@ -64,6 +65,7 @@ void process(const CMDOptions& options) {
  	params.trees = options.getBool("-trees");
   params.dispersible = options.getBool("-dispersible");
   params.directed = options.getBool("-directed");
+  params.applySatsuma = options.getBool("-satsuma");
   params.verbose = options.getInt("-verbose");
   params.stacks = options.getInt("-stacks");
   params.queues = options.getInt("-queues");

@@ -68,4 +68,7 @@ run_expect_all "tree page" "solving SAT model" "order:" -- \
 run_expect_all "cycle is not a tree page" "solving SAT model" "layout does not exist" -- \
   "$BOB" -i="$ROOT_DIR/tests/data/cycle.dot" -stacks=1 -trees=true -verbose=1
 
+run_expect_all "Satsuma preprocessing" "applying Satsuma" "order:" -- \
+  "$BOB" -i="$ROOT_DIR/tests/data/k33.dot" -queues=2 -satsuma -verbose=1
+
 printf 'All %d tests passed.\n' "$PASS_COUNT"

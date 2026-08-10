@@ -2,6 +2,7 @@
 
 #include "logging.h"
 #include "glucose/SolverSimp21.h"
+#include "satsuma/sat_symmetry.h"
 
 #include <sstream>
 #include <fstream>
@@ -225,12 +226,14 @@ class SATModel {
     adjVars[make_pair(i, j)] = var;
   }
 
-  void initSolver(Simp21::Solver& solver) {
+  void initVars(Simp21::Solver& solver) {
     for (int i = 0; i < curId; i++) {
       auto var = solver.newVar();
       CHECK(var == i);
     }
+  }
 
+  void initClauses(Simp21::Solver& solver) {
     for (auto& c : clauses) {
       Simp21::vec<Simp21::Lit> clause;
 
@@ -241,6 +244,55 @@ class SATModel {
       }
 
       solver.addClause_(clause);
+    }
+  }
+
+  void applySatsuma(int verbose, Simp21::Solver& solver) {
+    // variables are in [1..nvars]; negations are negative
+    const int nvars = varCount();
+    vector<vector<int>> cnf;
+    cnf.reserve(clauses.size());
+
+    vector<int> clause;
+    for (auto& c : clauses) {
+      clause.clear();
+      for (auto& literal : c.vars) {
+        CHECK(0 <= literal.id && literal.id < curId);
+        const int var = literal.id + 1;
+        clause.push_back(literal.positive ? var : -var);
+      }
+      cnf.push_back(clause);
+    }
+
+    auto result = applySatsumaSymmetry(verbose, nvars, cnf);
+    LOG_IF(verbose, "introduced %d new variables and %d symmetry-breaking clauses",
+           result.first - nvars, (int)result.second.size() - (int)clauses.size());
+
+    // nothing to add
+    if (result.first == nvars && result.second.size() == clauses.size()) {
+      return;
+    }
+
+    // adding vars
+    for (int i = nvars; i < result.first; i++) {
+      curId++;
+      auto var = solver.newVar();
+      CHECK(var == i);
+    }
+
+    // Satsuma returns the complete transformed formula
+    clauses.clear();
+    for (const auto& c : result.second) {
+      MClause transformedClause;
+      for (int literal : c) {
+        CHECK(literal != 0);
+        if (literal > 0) {
+          transformedClause.addVar(MVar(literal - 1, true));
+        } else {
+          transformedClause.addVar(MVar(-literal - 1, false));
+        }
+      }
+      clauses.push_back(transformedClause);
     }
   }
 

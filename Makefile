@@ -7,7 +7,8 @@ LDLIBS += -lz -pthread
 TARGET := build/bob
 DEBUG_TARGET := build/bob_debug
 
-SOURCES := $(wildcard src/bob/*.cpp) $(wildcard src/glucose/*.cpp)
+SOURCES := $(wildcard src/bob/*.cpp) $(wildcard src/glucose/*.cpp) \
+           $(wildcard src/satsuma/*.cpp)
 OBJECTS := $(SOURCES:src/%.cpp=build/obj/%.o)
 DEBUG_OBJECTS := $(SOURCES:src/%.cpp=build/debug/%.o)
 DEPFILES := $(OBJECTS:.o=.d) $(DEBUG_OBJECTS:.o=.d)

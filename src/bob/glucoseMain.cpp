@@ -756,7 +756,7 @@ void encodeMixedPagesSymmetry(SATModel& model, InputGraph& inputGraph, Params pa
 
 void encodeCustomConstraints(SATModel& model, InputGraph& inputGraph, Params params) {
   // Basic symmetryc-breaking constraints
-  if (inputGraph.numCustomConstraints() == 0 && !params.applyBreakID) {
+  if (inputGraph.numCustomConstraints() == 0 && !params.applyBreakID && !params.applySatsuma) {
     LOG_IF(params.verbose, "adding symmetry-breaking constraints");
 
     if (params.isStack()) {
@@ -1264,6 +1264,16 @@ bool runInternal(InputGraph& inputGraph, Params params) {
     encodeLocal(model, inputGraph, params);
   }
   
+  Simp21::Solver solver;
+  solver.verbosity = params.verbose;
+  model.initVars(solver);
+
+  if (params.applySatsuma) {
+    LOG_IF(params.verbose, "applying Satsuma for %d variables and %d constraints", model.varCount(), model.clauseCount());
+    model.applySatsuma(params.verbose, solver);
+  }
+
+  model.initClauses(solver);
   LOG_IF(params.verbose, "encoded %d variables and %d constraints", model.varCount(), model.clauseCount());
   if (params.modelFile != "") {
     model.toDimacs(params.modelFile);
@@ -1282,9 +1292,6 @@ bool runInternal(InputGraph& inputGraph, Params params) {
     return false;
   }
 
-  Simp21::Solver solver;
-  solver.verbosity = params.verbose;
-  model.initSolver(solver);
   LOG_IF(params.verbose, "solving SAT model with %d variables and %d constraints...", model.varCount(), model.clauseCount());
 
   auto result = solver.okay() ? solver.solve() : l_False;
