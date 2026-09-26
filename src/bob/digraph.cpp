@@ -8,14 +8,20 @@
 
 using namespace std;
 
-void encodeDirectedConstraints(SATModel& model, InputGraph& inputGraph, Params& params) {
+void encodeDirectedConstraints(SATModel& model, InputGraph& inputGraph, const Params& params) {
   CHECK(inputGraph.edges.size() == inputGraph.direction.size(), "no edge directions");
 
   for (size_t i = 0; i < inputGraph.edges.size(); i++) {
-    if (inputGraph.direction[i]) {
-      inputGraph.addNodeRel(inputGraph.edges[i].first, inputGraph.edges[i].second);
+    int u = inputGraph.edges[i].first;
+    int v = inputGraph.edges[i].second;
+    if (!inputGraph.direction[i]) 
+      swap(u, v);
+
+    if (params.fixedOrder) {
+      CHECK(inputGraph.getFixedIndex(u) < inputGraph.getFixedIndex(v), "fixed order does not agree with edge directions");
     } else {
-      inputGraph.addNodeRel(inputGraph.edges[i].second, inputGraph.edges[i].first);
+      inputGraph.addNodeRel(u, v);
+      // std::cerr << " encodeDirectedConstraints: (" << inputGraph.getVertexLabel(u) << ", " << inputGraph.getVertexLabel(v) << ")\n";
     }
   }
 }

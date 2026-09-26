@@ -9,6 +9,7 @@
 #include <string>
 #include <vector>
 #include <map>
+#include <unordered_map>
 #include <zlib.h>
 
 using namespace std;
@@ -18,6 +19,12 @@ struct MVar {
   bool positive;
 
   MVar(int id, bool positive): id(id), positive(positive) {}
+
+  bool operator < (const MVar& other) const {
+    if (id != other.id)
+      return id < other.id;
+    return positive < other.positive;
+  }
 };
 
 struct MClause {
@@ -77,35 +84,65 @@ struct MClause {
   void addVar(const MVar& v1) {
     vars.push_back(v1);
   }
+
+  void addAllVars(const MClause& clause) {
+    vars.insert(vars.end(), clause.vars.begin(), clause.vars.end());
+  }
+
+  bool operator == (const MClause& other) const {
+    if (vars.size() != other.vars.size())
+      return false;
+    for (size_t i = 0; i < vars.size(); i++) {
+      if (vars[i].id != other.vars[i].id || vars[i].positive != other.vars[i].positive) {
+        return false;
+      }
+    }
+    return true;
+  }
 };
 
 class SATModel {
+  struct pair_hash {
+    inline std::size_t operator()(const std::pair<int, int>& v) const {
+      return v.first * 31 + v.second;
+    }
+  };
+
+  std::unordered_map<int, Simp21::Var> vars;
   vector<MClause> clauses;
   int curId = 0;
+  int trueVarId;
 
- public:
   // relative order variables
-  map<pair<int, int>, int> relVars;
+  std::unordered_map<pair<int, int>, int, pair_hash> relVars;
   // page variables [edge_index][page]
-  map<pair<int, int>, int> pageVars;
+  std::unordered_map<pair<int, int>, int, pair_hash> pageVars;
   // same-page variables
-  map<pair<int, int>, int> spVars;
+  std::unordered_map<pair<int, int>, int, pair_hash> spVars;
   // adjacent-vertices variables
-  map<pair<int, int>, int> adjVars;
+  std::unordered_map<pair<int, int>, int, pair_hash> adjVars;
   // track variables [node_index][page]
-  map<pair<int, int>, int> trackVars;
+  std::unordered_map<pair<int, int>, int, pair_hash> trackVars;
   // same track variables
-  map<pair<int, int>, int> stVars;
+  std::unordered_map<pair<int, int>, int, pair_hash> stVars;
   // page type variables: true=stack, false=queue
-  map<int, int> pageTypeVars;
+  std::unordered_map<int, int> pageTypeVars;
 
-  // solution provided by the embedded or an external solver
-  map<int, bool> externalVars;
+  // solution (provided by an external solver)
+  std::unordered_map<int, bool> externalVars;
 
  public:
   SATModel() {
+    vars.clear();
     clauses.clear();
     curId = 0;
+
+    trueVarId = addVar();
+    addClause(MClause(MVar(trueVarId, true)));
+  }
+
+  MVar trueVar() const {
+    return MVar(trueVarId, true);
   }
 
   int addVar() {
@@ -114,21 +151,20 @@ class SATModel {
   }
 
   void addClause(MClause c) {
+    // skip the clause if it contains the true variable
+    for (MVar& var : c.vars) {
+      if (var.id == trueVarId && var.positive)
+        return;
+    }
     clauses.push_back(c);
   }
 
   MVar getRelVar(int i, int j, bool positive) const {
     CHECK(i != j);
-    pair<int, int> pair;
-
-    if (i < j) {
-      pair = make_pair(i, j);
-    } else {
-      pair = make_pair(j, i);
-    }
-
-    CHECK(relVars.count(pair));
-    int index = (*relVars.find(pair)).second;
+    auto pair = i < j ? make_pair(i, j) : make_pair(j, i);
+    auto it = relVars.find(pair);
+    CHECK(it != relVars.end(), "cannot find relVar for pair (%d, %d)", pair.first, pair.second);
+    int index = (*it).second;
     return MVar(index, i < j ? positive : !positive);
   }
 
@@ -189,6 +225,11 @@ class SATModel {
     return MVar(index, positive);
   }
 
+  bool hasSamePageVar(int edge1, int edge2) const {
+    auto pair = edge1 < edge2 ? make_pair(edge1, edge2) : make_pair(edge2, edge1);
+    return spVars.count(pair);
+  }
+
   void addSamePageVar(int edge1, int edge2) {
     int var = addVar();
     auto pair = edge1 < edge2 ? make_pair(edge1, edge2) : make_pair(edge2, edge1);
@@ -226,97 +267,61 @@ class SATModel {
     adjVars[make_pair(i, j)] = var;
   }
 
-  void initVars(Simp21::Solver& solver) {
+  template<class T>
+  void initVars(T& solver) {
+    // variables
     for (int i = 0; i < curId; i++) {
       auto var = solver.newVar();
-      CHECK(var == i);
+      vars[i] = var;
+      CHECK(0 <= vars[i] && vars[i] < curId);
     }
   }
 
-  void initClauses(Simp21::Solver& solver) {
+  template<class T>
+  void initClauses(T& solver) {
+    // clauses
     for (auto& c : clauses) {
       Simp21::vec<Simp21::Lit> clause;
 
-      for (auto& literal : c.vars) {
-        CHECK(0 <= literal.id && literal.id < curId);
-        auto solverLiteral = Simp21::mkLit(literal.id);
-        clause.push(literal.positive ? solverLiteral : ~solverLiteral);
+      for (auto& l : c.vars) {
+        CHECK(vars.count(l.id));
+        auto var = vars[l.id];
+
+        if (l.positive) {
+          clause.push(Simp21::mkLit(var));
+        } else {
+          clause.push(~Simp21::mkLit(var));
+        }
       }
 
       solver.addClause_(clause);
     }
   }
 
-  void applySatsuma(int verbose, Simp21::Solver& solver) {
-    // variables are in [1..nvars]; negations are negative
-    const int nvars = varCount();
-    vector<vector<int>> cnf;
-    cnf.reserve(clauses.size());
-
-    vector<int> clause;
-    for (auto& c : clauses) {
-      clause.clear();
-      for (auto& literal : c.vars) {
-        CHECK(0 <= literal.id && literal.id < curId);
-        const int var = literal.id + 1;
-        clause.push_back(literal.positive ? var : -var);
-      }
-      cnf.push_back(clause);
-    }
-
-    auto result = applySatsumaSymmetry(verbose, nvars, cnf);
-    LOG_IF(verbose, "introduced %d new variables and %d symmetry-breaking clauses",
-           result.first - nvars, (int)result.second.size() - (int)clauses.size());
-
-    // nothing to add
-    if (result.first == nvars && result.second.size() == clauses.size()) {
-      return;
-    }
-
-    // adding vars
-    for (int i = nvars; i < result.first; i++) {
-      curId++;
-      auto var = solver.newVar();
-      CHECK(var == i);
-    }
-
-    // Satsuma returns the complete transformed formula
-    clauses.clear();
-    for (const auto& c : result.second) {
-      MClause transformedClause;
-      for (int literal : c) {
-        CHECK(literal != 0);
-        if (literal > 0) {
-          transformedClause.addVar(MVar(literal - 1, true));
-        } else {
-          transformedClause.addVar(MVar(-literal - 1, false));
-        }
-      }
-      clauses.push_back(transformedClause);
-    }
-  }
-
-  void loadSolution(const Simp21::Solver& solver) {
-    CHECK(solver.model.size() == curId);
-    externalVars.clear();
-
-    for (int i = 0; i < curId; i++) {
-      auto value = solver.modelValue(i);
-      CHECK(value != l_Undef);
-      externalVars[i] = value == l_True;
-    }
+  template<class T>
+  void init(T& solver) {
+    initVars(solver);
+    initClauses(solver);
   }
 
   void toDimacs(const string& filename) {
     std::string ext = filename.substr(filename.find_last_of(".") + 1);
-
+    
     if (ext == "gz") {
       // zlib
       std::ostringstream oss;
+      // need this?
+      ios_base::sync_with_stdio(false);
+      oss.tie(nullptr);
+
       toDimacs(oss);
       const auto& content = oss.str(); // make it "const auto content = " if there are issues
+      const char* content_str = content.c_str();
+      const size_t content_len = content.length();
       gzFile out = gzopen(filename.c_str(), "wb9");
-      gzwrite(out, content.c_str(), content.length());
+      std::cerr << "started gzwrite...\n";
+      gzwrite(out, content_str, content_len);
+      std::cerr << "completed gzwrite...\n";
       gzclose(out);
     } else {
       // usual route
@@ -333,7 +338,8 @@ class SATModel {
 
     for (auto& c : clauses) {
       for (auto& l : c.vars) {
-	      int var = l.id + 1;
+        CHECK(vars.count(l.id));
+        auto var = vars[l.id] + 1;
         CHECK(1 <= var && var <= nvars);
 
         if (l.positive) {
@@ -385,25 +391,96 @@ class SATModel {
     in.close();
     CHECK(externalResult != "");
 
-    if (externalResult == "SATISFIABLE" && externalVars.size() != varCount()) {
-      ERROR("incorrect number of variables in '" + filename + "': " + std::to_string(varCount()) + " != " + std::to_string(externalVars.size()));
+    if (externalResult == "SATISFIABLE" && externalVars.size() != vars.size()) {
+      ERROR("incorrect number of variables in '" + filename + "': " + std::to_string(vars.size()) + " != " + std::to_string(externalVars.size()));
     }
 
     return externalResult;
   }
 
-  bool value(int id) {
-    CHECK(externalVars.count(id));
-    return externalVars[id];
+  template<class T>
+  void applySatsuma(int verbose, T& solver) {
+    // variables are in [1..nvars]; negations are negative
+    const int nvars = varCount();
+    vector<vector<int>> cl;
+    cl.reserve(clauses.size());
+
+    vector<int> clause;
+    for (auto& c : clauses) {
+      clause.clear();
+      for (auto& l : c.vars) {
+        CHECK(vars.count(l.id));
+        auto var = vars[l.id] + 1;
+        CHECK(1 <= var && var <= nvars);
+
+        if (l.positive) {
+          clause.push_back(var);
+        } else {
+          clause.push_back(-var);
+        }
+      }
+      cl.push_back(clause);
+    }
+
+    auto result = applySatsumaSymmetry(verbose, nvars, cl);
+    LOG_IF(verbose, "introduced %'d new variables and %'d symmetry-breaking clauses",
+           result.first - nvars, (int)result.second.size() - (int)clauses.size());
+
+    // nothing to add
+    if (result.first == nvars && result.second.size() == clauses.size())
+      return;
+
+    // adding vars
+    for (int i = nvars; i < result.first; i++) {
+      curId++;
+      auto var = solver.newVar();
+      vars[i] = var;
+      CHECK(0 <= vars[i] && vars[i] < curId);
+    }
+
+    // Satsuma returns the complete transformed formula
+    clauses.clear();
+    for (const auto& c : result.second) {
+      MClause clause;
+      for (int l : c) {
+        CHECK(l != 0);
+        if (l > 0) {
+          clause.addVar(MVar(l - 1, true));
+        } else {
+          clause.addVar(MVar(-l - 1, false));
+        }
+      }
+      clauses.push_back(clause);
+    }
   }
 
-  bool value(MVar v) {
-    CHECK(externalVars.count(v.id));
-    return externalVars[v.id] ? v.positive : !v.positive;
+  template<class T>
+  bool value(T& solver, int id) {
+    CHECK(vars.count(id));
+    auto var = vars[id];
+
+    if (!externalVars.empty()) {
+      return externalVars[id];
+    }
+
+    return (solver.model[var] == l_True ? true : false);
+  }
+
+  template<class T>
+  bool value(T& solver, MVar v) {
+    CHECK(vars.count(v.id));
+    auto var = vars[v.id];
+    bool positive = v.positive;
+
+    if (!externalVars.empty()) {
+      return externalVars[v.id] ? positive : !positive;
+    }
+
+    return (solver.model[var] == l_True ? positive : !positive);
   }
 
   size_t varCount() {
-	  return curId;
+    return vars.size();
   }
 
   size_t clauseCount() {

@@ -8,11 +8,14 @@
 #include <ctime>
 #include <iostream>
 #include <string>
+#include <unordered_map>
 
 // assertion (wild server error)
 const int ERROR_EXIT_CODE = 99;
 // application error
 const int CHECK_EXIT_CODE = 40;
+// user validation
+const int VERIFICATION_EXIT_CODE = 10;
 
 #define stringize(s) #s
 #define XSTR(s) stringize(s)
@@ -35,6 +38,11 @@ const int CHECK_EXIT_CODE = 40;
     std::cerr << ansi_prefix(TextColor::red) << message << ansi_suffix(TextColor::red) \
               << " [" << __FILE__ << ":" << __LINE__ << "]\n"; \
     throw ERROR_EXIT_CODE; \
+  }
+#define VERIFY(condition, ...) \
+  if (0 == (condition)) { \
+    CHECK_LOG(XSTR(condition), __FILE__, __LINE__, __VA_ARGS__); \
+    throw VERIFICATION_EXIT_CODE; \
   }
 
 inline bool LOGGER_USE_COLORS = true;
@@ -119,10 +127,42 @@ inline void LOG(TextColor color, const char* message, va_list& args) {
   LOG_line(color, vformat_to_string(message, args));
 }
 
+struct ColoredStr {
+  std::string value;
+  const char* c_str() const noexcept { return value.c_str(); }
+};
+
+inline ColoredStr colored_str(TextColor color, const char* format, ...) {
+  char buffer[4096];
+  va_list args;
+  va_start(args, format);
+  std::vsnprintf(buffer, sizeof(buffer), format, args);
+  va_end(args);
+
+  ColoredStr result;
+  result.value.reserve(
+      std::strlen(ansi_prefix(color)) + std::strlen(buffer) + std::strlen(ansi_suffix(color)));
+  result.value += ansi_prefix(color);
+  result.value += buffer;
+  result.value += ansi_suffix(color);
+  return result;
+}
+
+inline void LOG(const std::string& message) {
+  LOG_line(TextColor::none, message);
+}
+
 inline void LOG(const char* message, ...) {
   va_list args;
   va_start(args, message);
   LOG(TextColor::none, message, args);
+  va_end(args);
+}
+
+inline void LOG(TextColor color, const char* message, ...) {
+  va_list args;
+  va_start(args, message);
+  LOG(color, message, args);
   va_end(args);
 }
 
@@ -135,4 +175,31 @@ inline void LOG_IF(bool condition, const char* message, ...) {
   va_start(args, message);
   LOG(TextColor::none, message, args);
   va_end(args);
+}
+
+inline void LOG_EVERY_MS(int period, const char* message, ...) {
+  static std::unordered_map<std::string, std::chrono::time_point<std::chrono::steady_clock>> LastLogTime;
+  std::string msg = std::string(message);
+  auto time = std::chrono::steady_clock::now();
+  auto it = LastLogTime.find(msg);
+
+  if (it != LastLogTime.end()) {
+    auto lastTime = it->second;
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(time - lastTime).count();
+
+    if (duration <= period) {
+      return;
+    }
+  }
+
+  va_list args;
+  va_start(args, message);
+  LOG(TextColor::none, message, args);
+  va_end(args);
+  LastLogTime[msg] = time;
+}
+
+inline void initLogger(bool useColors) {
+  std::setlocale(LC_NUMERIC, "");
+  LOGGER_USE_COLORS = useColors;
 }

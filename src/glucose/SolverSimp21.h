@@ -8,12 +8,34 @@
 #include <algorithm>
 #include <chrono>
 #include <map>
+#ifdef SIMP21_ENABLE_USER_PROPAGATOR
+#include <memory>
+#include <set>
+#endif
 #include <unordered_map>
 #include <vector>
 
 enum clause_Type { LONG = 0, REMOVED, MIDSZ, SMALL };
 
 namespace Simp21 {
+
+#ifdef SIMP21_ENABLE_USER_PROPAGATOR
+class UserPropagator {
+public:
+  virtual ~UserPropagator() = default;
+
+  virtual void onAssignment(Lit p, int decisionLevel) {
+    (void)p;
+    (void)decisionLevel;
+  }
+
+  virtual void onBacktrack(int decisionLevel) {
+    (void)decisionLevel;
+  }
+
+  virtual bool findConflict(std::vector<Lit>& conflict_clause) = 0;
+};
+#endif
 
 class Solver {
 private:

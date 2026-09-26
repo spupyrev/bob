@@ -30,7 +30,7 @@ void addRelClause(SATModel& model, const vector<int>& v1, const vector<int>& v2,
   model.addClause(clause);
 }
 
-void encodeDispersible(SATModel& model, InputGraph& inputGraph, Params& params) {
+void encodeDispersable(SATModel& model, InputGraph& inputGraph, const Params& params) {
   int n = inputGraph.nc;
   int m = (int)inputGraph.edges.size();
   CHECK(n > 0 && m > 0);
@@ -80,7 +80,7 @@ vector<vector<int>> genSubsets(int n, int k) {
   return res;
 }
 
-void encodeLocal(SATModel& model, InputGraph& inputGraph, Params& params) {
+void encodeLocal(SATModel& model, InputGraph& inputGraph, const Params& params) {
   auto& edges = inputGraph.edges;
   int n = inputGraph.nc;
   int m = (int)inputGraph.edges.size();
@@ -89,6 +89,27 @@ void encodeLocal(SATModel& model, InputGraph& inputGraph, Params& params) {
   CHECK(local > 0);
   int pages = params.stacks + params.queues;
   CHECK(local <= pages);
+
+  if (local <= 3) {
+    // this can be done way more efficiently via groupEdgePages
+    for (int v = 0; v < n; v++) {
+      vector<int> adjEdges;
+
+      for (int j = 0; j < m; j++) {
+        if (edges[j].first == v || edges[j].second == v) {
+          adjEdges.push_back(j);
+        }
+      }
+
+      int na = (int)adjEdges.size();
+
+      if (na <= local) {
+        continue;
+      }
+      inputGraph.addGroupEdgePages(local, adjEdges);
+    }
+    return;
+  }
 
   // all vertices have adjacent edges on at most local pages
   for (int v = 0; v < n; v++) {

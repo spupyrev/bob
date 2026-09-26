@@ -163,11 +163,12 @@ bool GraphParser::writeGmlGraph(ostream& out, IOGraph& graph) const {
   out << "  directed 0\n";
 
   for (size_t i = 0; i < graph.nodes.size(); i++) {
-    auto& v = graph.nodes[i];
+    const auto& v = graph.nodes[i];
     string label = v.hasAttr("label") ? v.getAttr("label") : v.id;
     out << "  node\n  [\n";
     out << "    id " << v.index << "\n";
     out << "    label \"" << label << "\"\n";
+    // out << "    label \"" << v.index+1 << "\"\n";
     out << "    graphics\n";
     out << "    [\n";
 
@@ -187,34 +188,66 @@ bool GraphParser::writeGmlGraph(ostream& out, IOGraph& graph) const {
       out << "      h " << v.getAttr("h") << "\n";
     }
 
-    out << "      type \"ellipse\"\n";
-    out << "      raisedBorder 0\n";
-
-    if (v.hasAttr("fill")) {
-      out << "      fill \"" << v.getAttr("fill") << "\"\n";
+    if (v.getAttr("isGroup", "0") == "0") {
+      out << "      type \"ellipse\"\n";
+      out << "      raisedBorder 0\n";
+      out << "      outline \"ellipse\"\n";
+    } else {
+      out << "      type \"roundrectangle\"\n";
+      out << "      outline \"#000000\"\n";
+      out << "      outlineStyle \"dashed\"\n";
+      out << "      topBorderInset 0.0\n";
+      out << "      bottomBorderInset 0.0\n";
+      out << "      leftBorderInset 0.0\n";
+      out << "      rightBorderInset 0.0\n";
     }
 
-    out << "      outline \"ellipse\"\n";
+    if (v.hasAttr("fill"))
+      out << "      fill \"" << v.getAttr("fill") << "\"\n";
+
     out << "    ]\n";
     out << "    LabelGraphics\n";
     out << "    [\n";
 
-    if (v.hasAttr("color")) {
-      out << "      color \"" << v.getAttr("color") << "\"\n";
+    if (v.hasAttr("fontSize")) {
+      out << "      fontSize " << v.getAttr("fontSize") << "\n";
+      out << "      fontName \"Dialog\"\n";
     }
 
-    if (v.hasAttr("visible")) {
-      out << "      visible \"" << v.getAttr("visible") << "\"\n";
+    if (v.getAttr("isGroup", "0") == "0") {
+      out << "      anchor \"c\"\n";
+    } else {
+      out << "      anchor \"t\"\n";
+      out << "      alignment \"right\"\n";
+      out << "      autoSizePolicy \"node_width\"\n";
+      out << "      borderDistance 0.0\n";
+      out << "      fill \"#EBEBEB\"\n";
     }
+
+    if (v.hasAttr("color"))
+      out << "      color \"" << v.getAttr("color") << "\"\n";
+
+    if (v.hasAttr("visible"))
+      out << "      visible \"" << v.getAttr("visible") << "\"\n";
 
     out << "    ]\n";
+
+    if (v.hasAttr("isGroup")) {
+      out << "    isGroup " << v.getAttr("isGroup") << "\n";
+    }
+    if (v.hasAttr("gid")) {
+      out << "    gid " << v.getAttr("gid") << "\n";
+    }
+
     out << "  ]\n";
   }
 
   for (size_t i = 0; i < graph.edges.size(); i++) {
-    auto& e = graph.edges[i];
+    const auto& e = graph.edges[i];
     auto s = graph.getNode(e.source);
     auto t = graph.getNode(e.target);
+    if (e.hasAttr("visible") && e.getAttr("visible") == "0")
+      continue;
     vector<string> colors;
     if (e.hasAttr("fill")) {
       if (e.getAttr("multi", "false") == "true") {
@@ -248,6 +281,22 @@ bool GraphParser::writeGmlGraph(ostream& out, IOGraph& graph) const {
 
       if (e.hasAttr("targetArrow")) {
         out << "      targetArrow \"" << e.getAttr("targetArrow") << "\"\n";
+      }
+
+      if (e.hasAttr("type")) {
+        out << "      type \"" << e.getAttr("type") << "\"\n";
+      }
+
+      if (e.hasAttr("arcType")) {
+        out << "      arcType \"" << e.getAttr("arcType") << "\"\n";
+      }
+
+      if (e.hasAttr("arcHeight")) {
+        out << "      arcHeight " << e.getAttr("arcHeight") << "\n";
+      }
+
+      if (e.hasAttr("arcRatio")) {
+        out << "      arcRatio " << e.getAttr("arcRatio") << "\n";
       }
 
       if (e.hasAttr("x")) {

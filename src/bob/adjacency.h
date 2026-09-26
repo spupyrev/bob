@@ -1,7 +1,63 @@
 #pragma once
 
+#include "logging.h"
+
 #include <algorithm>
 #include <vector>
+
+using EdgeTy = std::pair<int, int>;
+using AdjListTy = std::vector<std::vector<int>>;
+
+inline std::vector<EdgeTy> adj_to_edges(const AdjListTy& adjList) {
+  std::vector<EdgeTy> edges;
+  for (size_t i = 0; i < adjList.size(); i++) {
+    for (size_t j = 0; j < adjList[i].size(); j++) {
+      if ((int)i < adjList[i][j])
+        edges.push_back({i, adjList[i][j]});
+    }
+  }
+  return edges;
+}
+
+inline AdjListTy edges_to_adj(const int n, const std::vector<EdgeTy>& edges) {
+  CHECK(!edges.empty());
+
+  for (const auto& [u, v] : edges) {
+    CHECK(u < v);
+    CHECK(0 <= u && u < n);
+    CHECK(0 <= v && v < n);
+  }
+  AdjListTy adjList(n, std::vector<int>());
+  for (const auto& [u, v] : edges) {
+    adjList[u].push_back(v);
+    adjList[v].push_back(u);
+  }
+  return adjList;
+}
+
+inline AdjListTy edges_to_adj(const std::vector<EdgeTy>& edges) {
+  CHECK(!edges.empty());
+
+  int minN = -1;
+  int maxN = -1;
+  for (auto& e : edges) {
+    CHECK(e.first < e.second);
+    if (minN == -1 || minN > std::min(e.first, e.second))
+      minN = std::min(e.first, e.second);
+    if (maxN == -1 || maxN < std::max(e.first, e.second))
+      maxN = std::max(e.first, e.second);
+  }
+  CHECK(maxN >= minN);
+  int N = maxN - minN + 1;
+  AdjListTy adjList(N, std::vector<int>());
+  for (auto& e : edges) {
+    int src = e.first - minN;
+    int dst = e.second - minN;
+    adjList[src].push_back(dst);
+    adjList[dst].push_back(src);
+  }
+  return adjList;
+}
 
 class Adjacency {
   Adjacency(const Adjacency&);
@@ -12,7 +68,7 @@ class Adjacency {
     adjList = std::vector<std::vector<int>>(n);
   }
 
-  explicit Adjacency(int n, const std::vector<std::pair<int, int>>& edges) {
+  explicit Adjacency(int n, const std::vector<EdgeTy>& edges) {
     adjList = std::vector<std::vector<int>>(n);
     from_edges(edges);
   }
@@ -73,6 +129,17 @@ class Adjacency {
     return adjList.size();
   }
 
+  size_t num_edges() const {
+    size_t m = 0;
+    for (size_t i = 0; i < adjList.size(); i++) {
+      for (size_t j = 0; j < adjList[i].size(); j++) {
+        if ((int)i < adjList[i][j])
+          m++;
+      }
+    }
+    return m;
+  }
+
   size_t degree(int index) const {
     return adjList[index].size();
   }
@@ -93,19 +160,19 @@ class Adjacency {
     }
   }
 
-  std::vector<std::pair<int, int>> to_edges() const {
-    std::vector<std::pair<int, int>> edges;
+  std::vector<EdgeTy> to_edges() const {
+    std::vector<EdgeTy> edges;
     for (size_t i = 0; i < adjList.size(); i++) {
       for (size_t j = 0; j < adjList[i].size(); j++) {
         if ((int)i < adjList[i][j]) {
-          edges.push_back(std::make_pair(i, adjList[i][j]));
+          edges.push_back({i, adjList[i][j]});
         }
       }
     }
     return edges;
   }
 
-  void from_edges(const std::vector<std::pair<int, int>>& edges) {
+  void from_edges(const std::vector<EdgeTy>& edges) {
     for (auto& edge : edges) {
       set(edge.first, edge.second);
       set(edge.second, edge.first);
@@ -155,7 +222,7 @@ private:
 //     degrees = std::vector<int>(n, 0);
 //   }
 
-//   explicit Adjacency(int n_, const std::vector<std::pair<int, int>>& edges) {
+//   explicit Adjacency(int n_, const std::vector<EdgeTy>& edges) {
 //     n = n_;
 //     bits = std::vector<std::vector<bool>>(n, std::vector<bool>(n, false));
 //     degrees = std::vector<int>(n, 0);
@@ -206,8 +273,8 @@ private:
 //   void shrink_to_fit() {
 //   }
 
-//   std::vector<std::pair<int, int>> to_edges() const {
-//     std::vector<std::pair<int, int>> edges;
+//   std::vector<EdgeTy> to_edges() const {
+//     std::vector<EdgeTy> edges;
 //     for (int i = 0; i < n; i++) {
 //       for (int j = i + 1; j < n; j++) {
 //         if (bits[i][j]) {
@@ -218,7 +285,7 @@ private:
 //     return edges;
 //   }
 
-//   void from_edges(const std::vector<std::pair<int, int>>& edges) {
+//   void from_edges(const std::vector<EdgeTy>& edges) {
 //     for (auto& edge : edges) {
 //       set(edge.first, edge.second);
 //       set(edge.second, edge.first);

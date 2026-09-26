@@ -158,6 +158,7 @@ class IOGraph {
 
   IONode* addStyle(const std::string& id) {
     auto it = id2styleIdx.find(id);
+    (void)it;
     assert(it == id2styleIdx.end());
     style.emplace_back((int)style.size(), id);
     id2styleIdx[id] = style.size() - 1;
@@ -166,12 +167,14 @@ class IOGraph {
 
   void checkConsistency() const {
     for (size_t i = 0; i < nodes.size(); i++) {
-      auto& node = nodes[i];
+      const auto& node = nodes[i];
+      (void)node;
       assert(node.index == (int)i);
       assert(id2nodeIdx.find(node.id)->second == i);
     }
 
-    for (auto& edge : edges) {
+    for (const auto& edge : edges) {
+      (void)edge;
       assert(id2nodeIdx.find(edge.source) != id2nodeIdx.end());
       assert(id2nodeIdx.find(edge.target) != id2nodeIdx.end());
     }

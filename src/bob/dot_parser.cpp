@@ -20,7 +20,6 @@ map<string, string> ParseAttr(const string& line);
 void ExtractAttr(const string& line, string& key, string& value);
 void SplitLine(const string& line, string& beforeBrakets, string& insideBrackets);
 vector<string> SplitAttr(const string& line, char separator);
-string trim(const string& line);
 
 bool readDotGraphInt(istream& in, IOGraph& graph) {
   vector<string> lines;
@@ -293,37 +292,6 @@ vector<string> SplitAttr(const string& line, char separator) {
   }
 
   return res;
-}
-
-string trim(const string& line) {
-  if (line.length() == 0) {
-    return line;
-  }
-
-  int i = 0;
-
-  while (i < (int)line.length()) {
-    if (line[i] == ' ' || line[i] == '\n' || line[i] == '\t' || line[i] == '\r') {
-      i++;
-      continue;
-    }
-
-    break;
-  }
-
-  int j = (int)line.length() - 1;
-
-  while (j >= 0) {
-    if (line[j] == ' ' || line[j] == '\n' || line[j] == '\t' || line[j] == '\r') {
-      j--;
-      continue;
-    }
-
-    break;
-  }
-
-  CHECK(i <= j, 110);
-  return line.substr(i, j - i + 1);
 }
 
 void WriteStyles(ostream& out, IOGraph& g);
