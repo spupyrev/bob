@@ -8,6 +8,144 @@
 
 using namespace std;
 
+// Assign edges to queues using the right endpoints of earlier edges.
+// If colors is null, only count the queues.
+static int countAndColorQueues(const vector<pair<int, int>>& edges, const vector<int>& order, vector<int>* colors) {
+  if (colors != nullptr) {
+    colors->assign(edges.size(), -1);
+  }
+  if (edges.empty()) {
+    return 0;
+  }
+
+  int n = (int) order.size();
+  CHECK(n > 0);
+  int mx = *std::max_element(order.begin(), order.end());
+  CHECK(mx >= 0);
+  // Make everything indexed on 1..n.
+  auto index = vector<int>(mx + 1, -1);
+
+  for (int i = 0; i < n; i++) {
+    CHECK(0 <= order[i] && order[i] <= mx);
+    CHECK(index[order[i]] == -1);
+    index[order[i]] = i + 1;
+  }
+
+  // left -> (right, position in the input edge list)
+  auto adjList = vector<vector<pair<int, int>>>(n + 1);
+
+  for (int edgeIdx = 0; edgeIdx < (int)edges.size(); edgeIdx++) {
+    const auto& edge = edges[edgeIdx];
+    CHECK(0 <= edge.first && edge.first <= mx);
+    CHECK(0 <= edge.second && edge.second <= mx);
+    CHECK(index[edge.first] != -1, "vertex %d is not present in the order", edge.first);
+    CHECK(index[edge.second] != -1, "vertex %d is not present in the order", edge.second);
+    int u = index[edge.first];
+    int v = index[edge.second];
+
+    if (u > v) {
+      swap(u, v);
+    }
+
+    CHECK(u < v && (1 <= u && u <= n) && (1 <= v && v <= n));
+    adjList[u].push_back({v, edgeIdx});
+  }
+
+  // R[q] is the rightmost endpoint of an edge in queue q from an earlier left vertex.
+  auto R = vector<int>(1, n + 1);
+
+  for (int i = 0; i < n; i++) {
+    int s = index[order[i]];
+    CHECK(s == i + 1);
+    // Select all queues before updating R: edges sharing s cannot nest each other.
+    auto qst = vector<int>(adjList[s].size(), -1);
+
+    for (int j = 0; j < (int)adjList[s].size(); j++) {
+      int t = adjList[s][j].first;
+      CHECK(s < t);
+      auto lb = std::lower_bound(R.begin(), R.end(), t, std::greater<int>());
+      int q = int(lb - R.begin());
+      CHECK(q > 0 && q <= n);
+      qst[j] = q;
+      if (colors != nullptr) {
+        (*colors)[adjList[s][j].second] = q - 1;
+      }
+    }
+
+    for (int j = 0; j < (int)adjList[s].size(); j++) {
+      int t = adjList[s][j].first;
+      int q = qst[j];
+
+      if (q >= (int)R.size()) {
+        R.push_back(t);
+      }
+
+      R[q] = max(R[q], t);
+    }
+
+    // Only touched entries can break the descending invariant.
+    for (int q : qst) {
+      CHECK(R[q - 1] > R[q]);
+      if (q + 1 < (int)R.size()) {
+        CHECK(R[q] > R[q + 1]);
+      }
+    }
+  }
+
+  CHECK(R.size() >= 2);
+  return int(R.size() - 1);
+}
+
+// Compute max rainbow (u1, v1, v2, u2) in O(|E| log |V|) time.
+int countRainbow(const vector<pair<int, int>>& edges, const vector<int>& order) {
+  return countAndColorQueues(edges, order, nullptr);
+}
+
+vector<int> colorQueueEdges(const vector<pair<int, int>>& edges, const vector<int>& order) {
+  vector<int> colors;
+  int pages = countAndColorQueues(edges, order, &colors);
+  if (edges.empty()) {
+    CHECK(pages == countRainbow(edges, order));
+    return colors;
+  }
+
+  // Independently verify that no queue has a pair of nested independent edges.
+  vector<int> index(*max_element(order.begin(), order.end()) + 1, -1);
+  for (int i = 0; i < (int)order.size(); i++) {
+    index[order[i]] = i;
+  }
+  vector<vector<pair<int, int>>> edgesByLeft(order.size());
+  for (int i = 0; i < (int)edges.size(); i++) {
+    int u = index[edges[i].first];
+    int v = index[edges[i].second];
+    if (u > v) {
+      swap(u, v);
+    }
+    CHECK(0 <= colors[i] && colors[i] < pages);
+    edgesByLeft[u].push_back({v, colors[i]});
+  }
+  vector<int> maxRight(pages, -1);
+  // Hold the maximum from earlier left vertices while checking all edges of one left vertex.
+  vector<int> priorRight(pages, -1);
+  vector<int> lastLeft(pages, -1);
+  for (int u = 0; u < (int)edgesByLeft.size(); u++) {
+    for (const auto& edge : edgesByLeft[u]) {
+      int v = edge.first, q = edge.second;
+      if (lastLeft[q] != u) {
+        priorRight[q] = maxRight[q];
+      }
+      CHECK(priorRight[q] <= v, "queue %d has nested independent edges", q);
+      maxRight[q] = max(maxRight[q], v);
+      lastLeft[q] = u;
+    }
+  }
+  for (int q = 0; q < pages; q++) {
+    CHECK(lastLeft[q] != -1);
+  }
+  CHECK(pages == countRainbow(edges, order));
+  return colors;
+}
+
 // Compute max rainbow (u1, v1, v2, u2) in the ordering (slow DP version)
 int countRainbowDP(const vector<pair<int, int>>& edges, const vector<int>& order, vector<pair<int, int>>& maxRainbow, int verbose) {
   if (edges.size() == 0) {
@@ -94,82 +232,6 @@ std::vector<pair<int, int>> getMaxRainbow(const vector<pair<int, int>>& edges, c
 }
 
 // Compute max rainbow (u1, v1, v2, u2) in the ordering (faster O(|E| log |V|) version)
-int countRainbow(const vector<pair<int, int>>& edges, const vector<int>& order) {
-  if (edges.empty()) {
-    return 0;
-  }
-
-  // prepare data
-  int n = (int) order.size();
-  int mx = *std::max_element(order.begin(), order.end());
-  // make everything indexed on 1..n
-  auto index = vector<int>(mx + 1, -1);
-
-  for (int i = 0; i < n; i++) {
-    CHECK(0 <= order[i] && order[i] <= mx);
-    CHECK(index[order[i]] == -1);
-    index[order[i]] = i + 1;
-  }
-
-  // left -> rights
-  auto adjList = vector<vector<int>>(n + 1, vector<int>());
-
-  for (auto edge : edges) {
-    CHECK(index[edge.first] != -1, "vertex %d is not present in the order", edge.first);
-    CHECK(index[edge.second] != -1, "vertex %d is not present in the order", edge.second);
-    int u = index[edge.first];
-    int v = index[edge.second];
-
-    if (u > v) {
-      swap(u, v);
-    }
-
-    CHECK(u < v && (1 <= u && u <= n) && (1 <= v && v <= n));
-    adjList[u].push_back(v);
-  }
-
-  // R[i] is the rightmost vertex of an edge assigned to queue Qi
-  auto R = vector<int>();
-  R.push_back(n + 1);
-
-  for (int i = 0; i < n; i++) {
-    // check R
-    for (size_t j = 0; j + 1 < R.size(); j++) {
-      CHECK(R[j] > R[j + 1]);
-    }
-
-    int s = index[order[i]];
-    CHECK(s == i + 1);
-    // queue for edge (s, adjList[s][j])
-    auto qst = vector<int>(adjList[s].size(), -1);
-
-    // first pass, find queues
-    for (int j = 0; j < (int)adjList[s].size(); j++) {
-      int t = adjList[s][j];
-      CHECK(s < t);
-      auto lb = std::lower_bound(R.begin(), R.end(), t, std::greater<int>());
-      int q = int(lb - R.begin());
-      CHECK(q > 0 && q <= n);
-      qst[j] = q;
-    }
-
-    // second pass, update R
-    for (int j = 0; j < (int)adjList[s].size(); j++) {
-      int t = adjList[s][j];
-      int q = qst[j];
-
-      if (q >= (int)R.size()) {
-        R.push_back(t);
-      }
-
-      R[q] = max(R[q], t);
-    }
-  }
-
-  //cerr << "done countRainbowFast2\n";
-  CHECK(R.size() >= 2);
-  return int(R.size() - 1);
-}
 
 int checkRainbow(const vector<pair<int, int>>& edges, const vector<int>& order, const string& name, int maxPages, int verbose) {
   int pages = countRainbow(edges, order);

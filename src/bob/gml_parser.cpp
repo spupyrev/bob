@@ -100,22 +100,24 @@ bool readGmlGraphInt(istream& in, IOGraph& graph) {
   while (getline(in, line)) {
     vector<string> tmp = SplitNotNull(line, " \t\r\"");
 
+    if (tmp.empty()) continue;
+
     if (tmp[0] == "node") {
-      CHECK(!in_node && !in_edge, 120);
+      CHECK(!in_node && !in_edge, "nested GML node/edge record");
       in_node = true;
 
       if (tmp.size() > 1 && tmp[1] == "[") {
         depth++;
       }
     } else if (tmp[0] == "edge") {
-      CHECK(!in_node && !in_edge, 120);
+      CHECK(!in_node && !in_edge, "nested GML node/edge record");
       in_edge = true;
 
       if (tmp.size() > 1 && tmp[1] == "[") {
         depth++;
       }
     } else if (tmp[0] == "directed" && depth == 0) {
-      CHECK(!in_node && !in_edge, 120);
+      CHECK(!in_node && !in_edge, "nested GML node/edge record");
       parseStyle(graph, buffer);
     } else if (tmp[0] == "[") {
       if (in_node || in_edge) {
@@ -144,6 +146,7 @@ bool readGmlGraphInt(istream& in, IOGraph& graph) {
     }
   }
 
+  CHECK(!in_node && !in_edge && depth == 0, "unfinished GML node/edge record");
   return graph.nodes.size() > 0;
 }
 

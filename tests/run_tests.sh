@@ -107,3 +107,5 @@ run_expect_all "bounded solver call" "return code: 0 (SAT)" -- \
   "$BOB" -i="$ROOT_DIR/tests/data/triangle.dot" -stacks=1 -timeout=1 -verbose=1
 
 printf 'All %d tests passed.\n' "$PASS_COUNT"
+
+"$ROOT_DIR/tests/run_planar_graph_tests.sh"

@@ -8,6 +8,13 @@
 using EdgeTy = std::pair<int, int>;
 using AdjListTy = std::vector<std::vector<int>>;
 
+inline EdgeTy make_edge(int u, int v) {
+  if (u > v) {
+    return {v, u};
+  }
+  return {u, v};
+}
+
 inline std::vector<EdgeTy> adj_to_edges(const AdjListTy& adjList) {
   std::vector<EdgeTy> edges;
   for (size_t i = 0; i < adjList.size(); i++) {
@@ -17,6 +24,54 @@ inline std::vector<EdgeTy> adj_to_edges(const AdjListTy& adjList) {
     }
   }
   return edges;
+}
+
+inline std::vector<int> vertices_of(const std::vector<EdgeTy>& edges) {
+  std::vector<int> vertices;
+  vertices.reserve(2 * edges.size());
+  for (const auto& [u, v] : edges) {
+    vertices.push_back(u);
+    vertices.push_back(v);
+  }
+  std::sort(vertices.begin(), vertices.end());
+  vertices.erase(std::unique(vertices.begin(), vertices.end()), vertices.end());
+  return vertices;
+}
+
+inline std::vector<EdgeTy> relabel_edges(
+    const std::vector<EdgeTy>& edges,
+    const std::vector<int>& labels) {
+  std::vector<EdgeTy> res;
+  res.reserve(edges.size());
+  for (const EdgeTy& edge : edges) {
+    CHECK(0 <= edge.first && edge.first < (int)labels.size());
+    CHECK(0 <= edge.second && edge.second < (int)labels.size());
+    CHECK(labels[edge.first] != -1 && labels[edge.second] != -1);
+    res.push_back(make_edge(labels[edge.first], labels[edge.second]));
+  }
+  return res;
+}
+
+/// Extract a subset of edges induced by the vertices.
+inline std::vector<EdgeTy> filter_edges(
+    int n,
+    const std::vector<EdgeTy>& edges,
+    const std::vector<int>& vertices) {
+  std::vector<EdgeTy> res;
+  std::vector<bool> isVertex(n, false);
+  for (int v : vertices) {
+    CHECK(0 <= v && v < n);
+    isVertex[v] = true;
+  }
+
+  for (const EdgeTy& edge : edges) {
+    CHECK(0 <= edge.first && edge.first < n);
+    CHECK(0 <= edge.second && edge.second < n);
+    if (isVertex[edge.first] && isVertex[edge.second]) {
+      res.push_back(edge);
+    }
+  }
+  return res;
 }
 
 inline AdjListTy edges_to_adj(const int n, const std::vector<EdgeTy>& edges) {
