@@ -66,6 +66,13 @@ Test whether an input graph admits a [6-track layout](https://spupyrev.github.io
 
         ./build/bob -i=graphs/weakly_6tracks.gml -tracks=6
 
+Combinatorial Layouts
+--------
+
+The planar queue-layout solver implements the product structure algorithm [Planar Graphs Have Bounded Queue-Number](https://doi.org/10.1145/3385731) (JACM, 2020), and its improvement for the 33-queue layout. Build with `make planar_queues`, then choose 49 or 33 queues:
+
+        ./build/planar_queues -i=graphs/planar20.edges -queues=<49|33> -o=graph.layout
+
 License
 --------
 BOB is released under the [MIT License](LICENSE).
