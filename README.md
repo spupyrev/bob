@@ -1,6 +1,9 @@
 Overview
 ================
-BOB is a SAT-based tool for constructing optimal linear layouts of graphs. With a modern SAT solver, it can compute stack, queue, mixed, twist, rique, or track layouts of graphs with hundreds of vertices within several minutes.
+BOB is a solver for constructing linear layouts of graphs, such as stack (book embeddings), queue, mixed, twist, rique, or track layouts. The tool provides two modes:
+
+- a [SAT-based solver](#basic-setup) for building optimal layouts; it can process graphs with hundreds of vertices within several minutes;
+- a collection of [fully combinatorial solvers](#combinatorial-layouts) that implement particular methods for linear graph layouts.
 
 Visit https://spupyrev.github.io/linearlayouts.html for a survey of existing results regarding upper and lower bounds on stack number, queue number and track number of various classes of graphs. If you use BOB in your research, please cite it as follows:
 

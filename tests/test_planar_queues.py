@@ -111,6 +111,24 @@ def check_io(binary, algorithms, timeout):
         for algorithm in algorithms:
             text = run(f'-queues={algorithm[3:]}', f'-i={graph_path}', '-o=-')
             check_layout(text, algorithm)
+            screen = subprocess.run(
+                [str(binary), f'-queues={algorithm[3:]}', f'-i={graph_path}', '-verbose=0'],
+                capture_output=True, text=True, timeout=timeout, check=True)
+            if screen.stdout:
+                raise SystemExit('default layout display must use stderr, as Bob does')
+            records = text.splitlines()
+            expected = ['order: [' + ' '.join(records[1].split()[1:]) + ']']
+            for page in range(int(algorithm[3:])):
+                edges = []
+                for record in records[2:]:
+                    _, u, v, q = record.split()
+                    if int(q) == page:
+                        edges.append(f'({u}, {v})')
+                expected.append(f'page {page}:' + ''.join(' ' + edge for edge in edges))
+            if '\n'.join(expected) + '\n' not in screen.stderr:
+                raise SystemExit('screen layout must use Bob order/page formatting')
+            if not re.search(r'^max-rainbow: \d+$', screen.stderr, re.MULTILINE):
+                raise SystemExit('screen layout is missing queue statistics')
             layout_path = directory / f'{algorithm}.layout'
             run(f'-queues={algorithm[3:]}', f'-i={graph_path}', f'-o={layout_path}')
             saved = layout_path.read_text()

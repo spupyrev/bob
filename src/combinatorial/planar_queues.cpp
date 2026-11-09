@@ -21,7 +21,7 @@ void prepareOptions(CMDOptions& options) {
   options.setUsageMessage("Usage: planar_queues [options]");
 
   options.registerOption("-n", "20", "Vertex count (an approximate target for 4connected)");
-  options.registerOption("-verbose", "1", "Output debug info");
+  options.registerOption("-verbose", "0", "Output debug info");
   options.registerOption("-seed", "0", "Random seed");
   options.registerOption("-graphs", "1", "How many graphs to process");
   options.registerOption("-graph-type", "max-planar",
@@ -29,7 +29,7 @@ void prepareOptions(CMDOptions& options) {
   options.registerOption("-i", "",
                          "Plane graph input (.edges/clockwise lists or .gml with coordinates)");
   options.registerOption("-o", "",
-                         "Write the layout or generated graph to a new file; '-' prints to stdout");
+                         "Export the layout or generated graph to a new file; '-' exports to stdout");
   options.registerAllowedValue("-graph-type", "max-planar");
   options.registerAllowedValue("-graph-type", "random-p3t");
   options.registerAllowedValue("-graph-type", "complete-p3t");
@@ -135,6 +135,8 @@ void processGraphs(CMDOptions& options) {
     }
     const int generatedVertices = graph.numberOfVertices();
     const int generatedEdges = graph.numberOfEdges();
+    vector<string> labels;
+    for (Vertex* vertex : graph.vertices) labels.push_back(vertex->label);
 
     ostringstream output;
     if (generate) {
@@ -146,6 +148,24 @@ void processGraphs(CMDOptions& options) {
       CHECK((int)order.size() == generatedVertices &&
             (int)edgeQueue.size() == generatedEdges,
             "queue output does not cover the input graph");
+      vector<vector<string>> pages(queueBound);
+      vector<EdgeTy> edges;
+      for (const auto& [edge, q] : edgeQueue) {
+        pages[q].push_back("(" + labels[edge.first] + ", " + labels[edge.second] + ")");
+        edges.push_back(edge);
+      }
+      std::cerr << "order: [";
+      for (size_t i = 0; i < order.size(); i++) {
+        if (i > 0) std::cerr << " ";
+        std::cerr << labels[order[i]];
+      }
+      std::cerr << "]\n";
+      for (size_t page = 0; page < pages.size(); page++) {
+        std::cerr << "page " << page << ":";
+        for (const string& edge : pages[page]) std::cerr << " " << edge;
+        std::cerr << "\n";
+      }
+      std::cerr << "max-rainbow: " << countRainbow(edges, order) << "\n";
       if (!outputPath.empty()) {
         output << "pps" << requestedQueues << " " << generatedVertices << " " << generatedEdges << "\n";
         output << "order";
