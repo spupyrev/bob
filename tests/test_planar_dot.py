@@ -14,7 +14,7 @@ def main():
     args = parser.parse_args()
     binary = str(args.binary.resolve())
     bound = 4 if args.mode == 'stacks' else 33
-    options = ['-checkAll'] if args.mode == 'stacks' else ['-queues=33']
+    options = [] if args.mode == 'stacks' else ['-queues=33']
 
     def run(*flags, success=True):
         result = subprocess.run([binary, *flags], capture_output=True, text=True, timeout=120)

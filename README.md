@@ -76,6 +76,12 @@ The planar queue-layout solver implements the product structure algorithm [Plana
 
         ./build/planar_queues -i=graphs/planar20.edges -queues=<49|33> -o=graph.layout
 
+The planar stack-layout solver implements Yannakakis's four-page algorithm [Embedding Planar Graphs in Four Pages](https://doi.org/10.1016/0022-0000(89)90032-9) (JCSS, 1989). Build with `make planar_stacks`, then construct a layout using at most four stacks:
+
+        ./build/planar_stacks -i=graphs/planar30.dot -o=graph.layout
+
+The example DOT graph has 30 vertices and 84 edges. It supplies no embedding; the solver computes one using the planarity algorithm before constructing the layout.
+
 License
 --------
 BOB is released under the [MIT License](LICENSE).

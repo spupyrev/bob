@@ -22,17 +22,33 @@ PLANAR_SOURCES := src/combinatorial/planar_queues.cpp \
                   src/bob/dot_parser.cpp src/bob/gml_parser.cpp
 PLANAR_OBJECTS := $(PLANAR_SOURCES:src/%.cpp=build/obj/%.o)
 
+STACK_TARGET := build/planar_stacks
+STACK_SOURCES := src/combinatorial/planar_stacks.cpp src/combinatorial/planar_4stacks.cpp \
+                 src/combinatorial/layout_cli.cpp \
+                 src/combinatorial/augmentation.cpp src/combinatorial/planar_graph.cpp \
+                 src/combinatorial/planar_graph_io.cpp src/combinatorial/graph_generator.cpp \
+                 src/combinatorial/planarity.cpp \
+                 src/bob/common.cpp src/bob/graph_algorithms.cpp \
+                 src/bob/dot_parser.cpp src/bob/gml_parser.cpp
+STACK_OBJECTS := $(STACK_SOURCES:src/%.cpp=build/obj/%.o)
+
 SOURCES := $(wildcard src/bob/*.cpp) $(wildcard src/glucose/*.cpp) \
            $(wildcard src/satsuma/*.cpp)
 OBJECTS := $(SOURCES:src/%.cpp=build/obj/%.o)
 DEBUG_OBJECTS := $(SOURCES:src/%.cpp=build/debug/%.o)
-DEPFILES := $(OBJECTS:.o=.d) $(DEBUG_OBJECTS:.o=.d) $(PLANAR_OBJECTS:.o=.d) $(GRAPH_TEST_TARGET).d
+DEPFILES := $(OBJECTS:.o=.d) $(DEBUG_OBJECTS:.o=.d) $(PLANAR_OBJECTS:.o=.d) $(STACK_OBJECTS:.o=.d) $(GRAPH_TEST_TARGET).d
 
-.PHONY: all debug d test clean planar_queues test-planar-queues
+.PHONY: all debug d test clean planar_queues test-planar-queues planar_stacks test-planar-stacks test-planar-stacks-sweep
 .DEFAULT_GOAL := all
 
 all: $(TARGET)
 planar_queues: $(PLANAR_TARGET)
+planar_stacks: $(STACK_TARGET)
+test-planar-stacks: $(STACK_TARGET)
+	python3 tests/test_planar_stacks.py
+	python3 tests/test_planar_dot.py --binary ./$(STACK_TARGET) --mode stacks
+test-planar-stacks-sweep: $(STACK_TARGET)
+	./$(STACK_TARGET) -graph-type=max-planar -n=1000 -seed=0 -graphs=150
 test-planar-queues: $(PLANAR_TARGET)
 	python3 tests/test_planar_queues.py --vertices=100 --graphs=10
 	python3 tests/test_planar_dot.py --binary ./$(PLANAR_TARGET) --mode queues
@@ -48,6 +64,10 @@ $(TARGET): $(OBJECTS)
 $(GRAPH_TEST_TARGET): tests/test_graph_algorithms.cpp build/obj/bob/graph_algorithms.o
 	@mkdir -p $(@D)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -MMD -MP -MF $@.d $< build/obj/bob/graph_algorithms.o $(LDFLAGS) -o $@
+
+$(STACK_TARGET): $(STACK_OBJECTS)
+	@echo "Linking $@"
+	$(CXX) $^ $(LDFLAGS) -o $@
 
 $(PLANAR_TARGET): $(PLANAR_OBJECTS)
 	@echo "Linking $@"
