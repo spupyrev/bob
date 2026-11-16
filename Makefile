@@ -9,11 +9,13 @@ DEBUG_TARGET := build/bob_debug
 GRAPH_TEST_TARGET := build/test_graph_algorithms
 PLANAR_TARGET := build/planar_queues
 PLANAR_SOURCES := src/combinatorial/planar_queues.cpp \
+                  src/combinatorial/layout_cli.cpp \
                   src/combinatorial/layered_h_partition.cpp \
                   src/combinatorial/queue_orders.cpp \
                   src/combinatorial/augmentation.cpp \
                   src/combinatorial/planar_graph.cpp \
                   src/combinatorial/planar_graph_io.cpp \
+                  src/combinatorial/planarity.cpp \
                   src/combinatorial/graph_generator.cpp \
                   src/combinatorial/tests.cpp \
                   src/bob/common.cpp src/bob/graph_algorithms.cpp src/bob/queues.cpp \
@@ -33,6 +35,7 @@ all: $(TARGET)
 planar_queues: $(PLANAR_TARGET)
 test-planar-queues: $(PLANAR_TARGET)
 	python3 tests/test_planar_queues.py --vertices=100 --graphs=10
+	python3 tests/test_planar_dot.py --binary ./$(PLANAR_TARGET) --mode queues
 debug d: $(DEBUG_TARGET)
 test: $(TARGET) $(GRAPH_TEST_TARGET)
 	./$(GRAPH_TEST_TARGET)

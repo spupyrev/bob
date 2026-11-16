@@ -1,4 +1,5 @@
 #include "planar_graph.h"
+#include "planarity.hpp"
 #include "bob/logging.h"
 #include "bob/graph_parser.h"
 #include "bob/graph_algorithms.h"
@@ -665,6 +666,35 @@ void PlanarGraph::writeGML(const string& filename) {
   LOG(TextColor::blue, "writing planar gml graph to '%s'", filename.c_str());
   GraphParser parser;
   CHECK(parser.writeGmlGraph(filename, ioGraph), "writing gml file failed");
+}
+
+void PlanarGraph::readDOT(const std::string& filename) {
+  CHECK(vertices.empty(), "DOT input requires an empty graph");
+  IOGraph input;
+  GraphParser parser;
+  CHECK(parser.readDotGraph(filename, input), "parsing DOT file failed");
+  const int n = input.nodes.size();
+  CHECK(n > 0, "DOT input must contain at least one vertex");
+  std::vector<std::pair<int, int>> edges;
+  std::set<std::pair<int, int>> unique;
+  for (const auto& edge : input.edges) {
+    const int u = input.getNode(edge.source)->index;
+    const int v = input.getNode(edge.target)->index;
+    CHECK(u != v, "planar layouts require a simple graph: loop at %s", edge.source.c_str());
+    const auto key = std::minmax(u, v);
+    CHECK(unique.emplace(key.first, key.second).second,
+          "planar layouts require a simple graph: repeated edge (%s,%s)",
+          edge.source.c_str(), edge.target.c_str());
+    edges.emplace_back(key.first, key.second);
+  }
+  const auto embedding = planarvibe::planarity::lr_test(n, edges);
+  CHECK(embedding.ok, "DOT input is nonplanar: %s", embedding.reason.c_str());
+  readEdges(embedding.rotation);
+  for (int v = 0; v < n; ++v)
+    vertices[v]->label = input.nodes[v].getAttr("label", input.nodes[v].id);
+  // readEdges selects an outer face. Component preprocessing selects a face
+  // independently for each other component before triangulating it.
+  CHECK(checkConsistency(false), "computed DOT embedding is inconsistent");
 }
 
 void PlanarGraph::readGML(const string& filename) {

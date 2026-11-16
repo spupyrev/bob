@@ -70,12 +70,14 @@ bool ReadLines(istream& in, vector<string>& res) {
   bool insideQuote = false;
 
   while (in.get(c)) {
-    if (c == '{') {
+    if (c == '{' && !insideQuote) {
       state = 0;
       continue;
     }
 
-    if (c == '}') {
+    if (c == '}' && !insideQuote) {
+      if (!trim(s).empty()) res.push_back(s);
+      s.clear();
       state = -1;
       continue;
     }
@@ -97,7 +99,7 @@ bool ReadLines(istream& in, vector<string>& res) {
     }
   }
 
-  return (state == -1 && res.size() > 0);
+  return (state == -1 && !insideQuote && res.size() > 0);
 }
 
 bool isSpecial(const string& line) {
@@ -120,28 +122,29 @@ bool isSpecial(const string& line) {
   return false;
 }
 
-bool isNode(const string& line) {
-  string beforeBrakets, insideBrackets;
-  SplitLine(line, beforeBrakets, insideBrackets);
-
-  for (int j = 0; j + 1 < (int)beforeBrakets.length(); j++)
-    if ((beforeBrakets[j] == '-' && beforeBrakets[j + 1] == '-') || (beforeBrakets[j] == '-' && beforeBrakets[j + 1] == '>')) {
-      return false;
+// Locate edge operators outside quoted node identifiers.
+static vector<size_t> edgeOperators(const string& text) {
+  vector<size_t> result;
+  bool quoted = false;
+  for (size_t i = 0; i < text.size(); ++i) {
+    if (quoted && text[i] == '\\' && i + 1 < text.size()) { ++i; continue; }
+    if (text[i] == '"') quoted = !quoted;
+    if (!quoted && i + 1 < text.size() && text[i] == '-' &&
+        (text[i + 1] == '-' || text[i + 1] == '>')) {
+      result.push_back(i++);
     }
+  }
+  return result;
+}
 
-  return true;
+bool isNode(const string& line) {
+  return !isEdge(line);
 }
 
 bool isEdge(const string& line) {
   string beforeBrakets, insideBrackets;
   SplitLine(line, beforeBrakets, insideBrackets);
-
-  for (int j = 0; j + 1 < (int)beforeBrakets.length(); j++)
-    if ((beforeBrakets[j] == '-' && beforeBrakets[j + 1] == '-') || (beforeBrakets[j] == '-' && beforeBrakets[j + 1] == '>')) {
-      return true;                                          
-    }
-
-  return false;
+  return !edgeOperators(beforeBrakets).empty();
 }
 
 string ExtractId(const string& line) {
@@ -158,27 +161,26 @@ string ExtractId(const string& line) {
 IOEdge* ParseEdge(IOGraph& graph, const string& line) {
   string beforeBrakets, insideBrackets;
   SplitLine(line, beforeBrakets, insideBrackets);
-  IOEdge* e = nullptr;
-
-  //ids
-  for (size_t j = 0; j + 1 < beforeBrakets.length(); j++) {
-    if ((beforeBrakets[j] == '-' && beforeBrakets[j + 1] == '-') || (beforeBrakets[j] == '-' && beforeBrakets[j + 1] == '>')) {
-      string n1 = beforeBrakets.substr(0, j);
-      string n2 = beforeBrakets.substr(j + 2, beforeBrakets.length() - j - 2);
-
-      if (trim(n1) == trim(n2)) {
-        return nullptr;
-      }
-
-      e = graph.addEdge(ExtractId(n1), ExtractId(n2));
-      break;
-    }
+  const auto operators = edgeOperators(beforeBrakets);
+  CHECK(!operators.empty(), "missing DOT edge operator");
+  vector<string> ids;
+  size_t start = 0;
+  for (size_t at : operators) {
+    const string id = trim(beforeBrakets.substr(start, at - start));
+    CHECK(!id.empty(), "missing DOT edge endpoint");
+    ids.push_back(ExtractId(id));
+    start = at + 2;
   }
-
-  assert(e != nullptr);
-  //attrs
-  e->setAttr(ParseAttr(insideBrackets));
-  return e;
+  const string last = trim(beforeBrakets.substr(start));
+  CHECK(!last.empty(), "missing DOT edge endpoint");
+  ids.push_back(ExtractId(last));
+  const auto attrs = ParseAttr(insideBrackets);
+  IOEdge* edge = nullptr;
+  for (size_t i = 1; i < ids.size(); ++i) {
+    edge = graph.addEdge(ids[i - 1], ids[i]);
+    edge->setAttr(attrs);
+  }
+  return edge;
 }
 
 IONode* ParseNode(IOGraph& graph, const string& line) {
@@ -186,7 +188,7 @@ IONode* ParseNode(IOGraph& graph, const string& line) {
   SplitLine(line, beforeBrakets, insideBrackets);
 
   string id = ExtractId(beforeBrakets);
-  auto node = graph.addNode(id);
+  auto node = graph.getOrCreateNode(id);
 
   auto attrs = ParseAttr(insideBrackets);
   node->setAttr(attrs);

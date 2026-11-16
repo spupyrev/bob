@@ -13,7 +13,7 @@ build="$root/build/planar_graph_tests"
 mkdir -p "$build"
 "${CXX:-g++}" -std=c++17 -O0 -g -I"$root/src" -I"$planar" -I"$common" \
   "$root/tests/test_planar_graph.cpp" \
-  "$planar/planar_graph.cpp" "$planar/planar_graph_io.cpp" \
+  "$planar/planar_graph.cpp" "$planar/planar_graph_io.cpp" "$planar/planarity.cpp" \
   "$common/common.cpp" "$common/graph_algorithms.cpp" \
   "$common/dot_parser.cpp" "$common/gml_parser.cpp" \
   -o "$build/test_planar_graph"

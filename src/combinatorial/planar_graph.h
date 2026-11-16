@@ -233,6 +233,8 @@ class PlanarGraph {
   void readEdges(const vector<vector<int>>& edges);
   void readEdges(const string& filename);
   void readGML(const string& filename);
+  // Compute an embedding of the underlying undirected simple DOT graph.
+  void readDOT(const string& filename);
   void write() const;
   void writeEdges(const string& filename) const;
   void writeEdges(std::ostream& out) const;
